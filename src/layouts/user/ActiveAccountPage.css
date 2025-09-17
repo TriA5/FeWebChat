@@ -1,0 +1,261 @@
+.activation-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #e0e7ff 0%, #f5f7fa 100%);
+  padding: 20px;
+}
+
+.activation-box {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  padding: 32px 24px;
+  width: 100%;
+  max-width: 450px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.activation-header {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.activation-header h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.chat-message {
+  background: #eef2ff;
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: #6366f1;
+  font-weight: 500;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.chat-message.success {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.chat-message.error {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.error-messages {
+  background: #fef2f2;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.error-message {
+  color: #dc2626;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.error-message:last-child {
+  margin-bottom: 0;
+}
+
+.activation-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.activation-form input {
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font-size: 16px;
+  outline: none;
+  transition: border 0.2s;
+}
+
+.activation-form input:focus {
+  border-color: #6366f1;
+}
+
+.activate-btn {
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.activate-btn:hover:not(:disabled) {
+  background: linear-gradient(90deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+}
+
+.activate-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.success-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.success-info {
+  text-align: center;
+}
+
+.success-info p {
+  color: #059669;
+  font-weight: 500;
+  margin: 0;
+  font-size: 14px;
+}
+
+.login-btn {
+  background: linear-gradient(90deg, #6366f1 0%, #818cf8 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.login-btn:hover {
+  background: linear-gradient(90deg, #818cf8 0%, #6366f1 100%);
+  transform: translateY(-2px);
+}
+
+.activation-help {
+  text-align: center;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.activation-help p {
+  color: #6b7280;
+  margin: 0 0 12px 0;
+  font-size: 14px;
+}
+
+.resend-btn {
+  background: transparent;
+  color: #6366f1;
+  border: 1px solid #6366f1;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.resend-btn:hover:not(:disabled) {
+  background: #6366f1;
+  color: #fff;
+}
+
+.resend-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.activation-info {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+}
+
+.activation-info p {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.activation-info p:last-child {
+  margin-bottom: 0;
+}
+
+.activation-info strong {
+  color: #374151;
+}
+
+.loading-indicator {
+  text-align: center;
+  padding: 20px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e5e7eb;
+  border-top: 4px solid #6366f1;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 12px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-indicator p {
+  color: #6b7280;
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .activation-container {
+    padding: 10px;
+  }
+  
+  .activation-box {
+    padding: 24px 20px;
+  }
+  
+  .activation-header h2 {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .activation-box {
+    padding: 20px 16px;
+  }
+  
+  .chat-message {
+    font-size: 14px;
+    padding: 10px 14px;
+  }
+  
+  .activation-form input {
+    padding: 10px 14px;
+  }
+  
+  .activate-btn, .login-btn {
+    padding: 10px 20px;
+    font-size: 15px;
+  }
+}
