@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getUserInfo } from '../../api/user/loginApi';
+import { connect as wsConnect, subscribe as wsSubscribe, send as wsSend } from '../../api/websocket/stompClient';
+import { getMessages as getMessagesApi, listConversations } from '../../api/chat/chatApi';
+import { getFriendsList } from '../../api/user/friendshipApi';
 import './Chat.css';
 
 interface Message {
@@ -41,24 +44,12 @@ const Chat: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [friendMap, setFriendMap] = useState<Record<string, { name: string; avatar?: string }>>({});
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const user = getUserInfo();
-    if (user) {
-      setCurrentUser({
-        id: user.id || '1',
-        username: user.username || 'user',
-        firstName: user.lastName || 'User',
-        lastName: user.lastName || '',
-        avatar: user.avatar || '',
-        isOnline: true
-      });
-    }
-    loadChatRooms();
-  }, []);
+  // (Effects moved below loadMessages definition)
 
   useEffect(() => {
     scrollToBottom();
@@ -68,147 +59,170 @@ const Chat: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Mock data - Thay thế bằng API calls thực tế
-  const loadChatRooms = () => {
-    const mockRooms: ChatRoom[] = [
-      {
-        id: '1',
-        name: 'Nhóm Công Việc',
-        avatar: '',
-        lastMessage: 'Cuộc họp lúc 2h chiều nhé',
-        lastMessageTime: new Date(Date.now() - 10 * 60 * 1000),
-        unreadCount: 3,
-        isOnline: true,
-        participants: ['1', '2', '3']
-      },
-      {
-        id: '2',
-        name: 'Nguyễn Văn A',
-        avatar: '',
-        lastMessage: 'OK, tôi sẽ gửi file cho bạn',
-        lastMessageTime: new Date(Date.now() - 30 * 60 * 1000),
-        unreadCount: 0,
-        isOnline: true,
-        participants: ['1', '2']
-      },
-      {
-        id: '3',
-        name: 'Trần Thị B',
-        avatar: '',
-        lastMessage: 'Cảm ơn bạn nhiều!',
-        lastMessageTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        unreadCount: 1,
-        isOnline: false,
-        participants: ['1', '3']
-      },
-      {
-        id: '4',
-        name: 'Nhóm Bạn Bè',
-        avatar: '',
-        lastMessage: 'Hẹn gặp cuối tuần nhé',
-        lastMessageTime: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        unreadCount: 0,
-        isOnline: false,
-        participants: ['1', '2', '3', '4']
-      }
-    ];
-    setChatRooms(mockRooms);
-  };
+  // (Removed: loadChatRooms; init effect below will fetch conversations)
 
-  const loadMessages = (roomId: string) => {
-    const mockMessages: Message[] = [
-      {
-        id: '1',
-        senderId: '2',
-        senderName: 'Nguyễn Văn A',
-        content: 'Chào bạn! Bạn có khỏe không?',
-        timestamp: new Date(Date.now() - 60 * 60 * 1000),
+  const loadMessages = useCallback(async (roomId: string) => {
+    try {
+      const msgs = await getMessagesApi(roomId);
+      const me = getUserInfo();
+      const myId = me?.id;
+      const myName = me?.username || 'Tôi';
+      const transformed: Message[] = msgs.map(m => ({
+        id: m.id,
+        senderId: m.senderId,
+        senderName: m.senderId === myId ? myName : 'Bạn bè',
+        content: m.content,
+        timestamp: new Date(m.createdAt),
         type: 'text',
-        isOwn: false
-      },
-      {
-        id: '2',
-        senderId: currentUser?.id || '1',
-        senderName: currentUser?.firstName || 'Bạn',
-        content: 'Chào! Tôi khỏe, cảm ơn bạn',
-        timestamp: new Date(Date.now() - 50 * 60 * 1000),
-        type: 'text',
-        isOwn: true
-      },
-      {
-        id: '3',
-        senderId: '2',
-        senderName: 'Nguyễn Văn A',
-        content: 'Tuần này bạn có rảnh không? Mình muốn hẹn gặp',
-        timestamp: new Date(Date.now() - 40 * 60 * 1000),
-        type: 'text',
-        isOwn: false
-      },
-      {
-        id: '4',
-        senderId: currentUser?.id || '1',
-        senderName: currentUser?.firstName || 'Bạn',
-        content: 'Có chứ, bạn muốn gặp khi nào?',
-        timestamp: new Date(Date.now() - 35 * 60 * 1000),
-        type: 'text',
-        isOwn: true
-      },
-      {
-        id: '5',
-        senderId: '2',
-        senderName: 'Nguyễn Văn A',
-        content: 'OK, tôi sẽ gửi file cho bạn',
-        timestamp: new Date(Date.now() - 30 * 60 * 1000),
-        type: 'text',
-        isOwn: false
-      }
-    ];
-    setMessages(mockMessages);
-  };
+        isOwn: m.senderId === myId
+      }));
+      setMessages(transformed);
+    } catch (e) {
+      console.error('Load messages failed', e);
+      setMessages([]);
+    }
+  }, []);
 
-  const handleSelectChatRoom = (room: ChatRoom) => {
-    setSelectedChatRoom(room);
-    loadMessages(room.id);
-    
-    // Mark as read
-    setChatRooms(prev => 
-      prev.map(r => 
-        r.id === room.id ? { ...r, unreadCount: 0 } : r
-      )
-    );
+  // Initialize current user and load friends + conversations
+  useEffect(() => {
+    const init = async () => {
+      const user = getUserInfo();
+      if (user) {
+        setCurrentUser({
+          id: user.id || '1',
+          username: user.username || 'user',
+          firstName: user.lastName || 'User',
+          lastName: user.lastName || '',
+          avatar: user.avatar || '',
+          isOnline: true,
+        });
+      }
+      try {
+        const me = getUserInfo();
+        if (!me?.id) return;
+        // Load friends and build lookup
+        const friends = await getFriendsList();
+        const map: Record<string, { name: string; avatar?: string }> = {};
+        friends.forEach(f => {
+          if (f.userId) {
+            map[f.userId] = { name: `${f.firstName} ${f.lastName}`.trim(), avatar: f.avatar };
+          }
+        });
+        setFriendMap(map);
+        const convs = await listConversations(me.id);
+        const rooms: ChatRoom[] = convs.map(c => {
+          const otherId = c.participant1Id === me.id ? c.participant2Id : c.participant1Id;
+          const info = map[otherId];
+          return {
+            id: c.id,
+            name: info?.name || 'Cuộc trò chuyện',
+            avatar: info?.avatar || '',
+            lastMessage: '',
+            lastMessageTime: undefined,
+            unreadCount: 0,
+            isOnline: true,
+            participants: [c.participant1Id, c.participant2Id],
+          };
+        });
+        setChatRooms(rooms);
+      } catch (e) {
+        console.error('Init chat failed', e);
+      }
+    };
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    init();
+  }, []);
+
+  // When rooms are loaded and none selected, pick first and load messages
+  useEffect(() => {
+    const selectFirst = async () => {
+      if (!selectedChatRoom && chatRooms.length > 0) {
+        const first = chatRooms[0];
+        setSelectedChatRoom(first);
+        await loadMessages(first.id);
+      }
+    };
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    selectFirst();
+  }, [chatRooms, selectedChatRoom, loadMessages]);
+
+  const handleSelectChatRoom = async (room: ChatRoom) => {
+    try {
+      setSelectedChatRoom(room);
+      await loadMessages(room.id);
+    } catch (e) {
+      console.error('Select chat room failed', e);
+    }
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!newMessage.trim() || !selectedChatRoom || !currentUser) return;
-
-    const message: Message = {
-      id: Date.now().toString(),
-      senderId: currentUser.id,
-      senderName: currentUser.firstName,
-      senderAvatar: currentUser.avatar,
-      content: newMessage.trim(),
-      timestamp: new Date(),
-      type: 'text',
-      isOwn: true
-    };
-
-    setMessages(prev => [...prev, message]);
+    const content = newMessage.trim();
     setNewMessage('');
-    
-    // Update last message in chat room
-    setChatRooms(prev => 
-      prev.map(room => 
-        room.id === selectedChatRoom.id 
-          ? { ...room, lastMessage: message.content, lastMessageTime: message.timestamp }
-          : room
-      )
-    );
+
+    // send via websocket
+    wsSend('/app/chat.send', {
+      conversationId: selectedChatRoom.id,
+      senderId: currentUser.id,
+      content,
+    });
 
     // Focus input
     inputRef.current?.focus();
   };
+
+  // websocket subscriptions
+  useEffect(() => {
+    const me = getUserInfo();
+    let subConv: any = null;
+    let subMsg: any = null;
+    wsConnect(() => {
+      if (me?.id) {
+        subConv = wsSubscribe(`/topic/conversations/${me.id}`, (msg) => {
+          const data = JSON.parse(msg.body);
+          const myId = me.id;
+          const otherId = data.participant1Id === myId ? data.participant2Id : data.participant1Id;
+          const info = friendMap[otherId];
+          setChatRooms(prev => [{
+            id: data.id,
+            name: info?.name || 'Cuộc trò chuyện',
+            unreadCount: 0,
+            isOnline: true,
+            participants: [myId, otherId],
+            avatar: info?.avatar || '',
+            lastMessage: '',
+            lastMessageTime: new Date()
+          } as any, ...prev]);
+        });
+      }
+      if (selectedChatRoom) {
+        subMsg = wsSubscribe(`/topic/chat/${selectedChatRoom.id}`, (msg) => {
+          const data = JSON.parse(msg.body);
+          const myId = me?.id;
+          const myName = me?.username || 'Tôi';
+          const parsedDate = new Date(data.createdAt);
+          const ts = isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+          const incoming: Message = {
+            id: data.id,
+            senderId: data.senderId,
+            senderName: data.senderId === myId ? myName : (friendMap[data.senderId]?.name || 'Bạn bè'),
+            content: data.content,
+            timestamp: ts,
+            type: 'text',
+            isOwn: data.senderId === myId,
+          };
+          setMessages(prev => [...prev, incoming]);
+          // update room preview
+          setChatRooms(prev => prev.map(r => r.id === selectedChatRoom.id ? { ...r, lastMessage: incoming.content, lastMessageTime: incoming.timestamp } : r));
+        });
+      }
+    });
+    return () => {
+      try { subConv && subConv.unsubscribe && subConv.unsubscribe(); } catch {}
+      try { subMsg && subMsg.unsubscribe && subMsg.unsubscribe(); } catch {}
+    };
+  }, [selectedChatRoom, friendMap]);
 
   const formatTime = (date: Date) => {
     const now = new Date();
@@ -232,6 +246,11 @@ const Chat: React.FC = () => {
   const filteredChatRooms = chatRooms.filter(room =>
     room.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Ensure websocket connection on mount
+  useEffect(() => {
+    wsConnect();
+  }, []);
 
   if (!currentUser) {
     return (

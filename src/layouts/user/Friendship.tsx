@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { connect as wsConnect, subscribe as wsSubscribe } from '../../api/websocket/stompClient';
+import { ensureConversation } from '../../api/chat/chatApi';
 import { 
   searchUserByPhone, 
   validatePhoneNumber, 
@@ -10,6 +13,7 @@ import {
   getFriendRequestsList,
   getFriendsList
 } from '../../api/user/friendshipApi';
+import { getUserInfo } from '../../api/user/loginApi';
 import './Friendship.css';
 
 interface Friend {
@@ -33,6 +37,7 @@ interface FriendRequest {
 }
 
 const Friendship: React.FC = () => {
+  const navigate = useNavigate();
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,6 +53,19 @@ const Friendship: React.FC = () => {
     };
     
     initializeData();
+    // connect websocket and subscribe to new conversation notifications
+    const currentUserId = getUserInfo()?.id;
+    wsConnect(() => {
+      if (currentUserId) {
+        wsSubscribe(`/topic/conversations/${currentUserId}`, (msg) => {
+          try {
+            const payload = JSON.parse(msg.body);
+            console.log('New conversation notification:', payload);
+            // Optionally: update UI or navigate to chat
+          } catch (e) { console.error(e); }
+        });
+      }
+    });
   }, []);
 
   // Load real friends list from API
@@ -163,6 +181,17 @@ const Friendship: React.FC = () => {
         // Remove from requests list
         setFriendRequests(prev => prev.filter(req => req.id !== friendshipId));
         alert('Đã chấp nhận lời mời kết bạn!');
+        // Ensure conversation exists between me and the requester
+        const me = getUserInfo();
+        const request = friendRequests.find(r => r.id === friendshipId);
+        if (me?.id && request?.userId) {
+          try {
+            const conversationId = await ensureConversation(me.id, request.userId);
+            console.log('Conversation ensured:', conversationId);
+            // Điều hướng sang trang chat để thấy room ngay
+            navigate('/chat');
+          } catch (e) { console.error('Ensure conversation failed', e); }
+        }
       } else {
         alert('Không thể chấp nhận lời mời kết bạn. Vui lòng thử lại.');
       }
@@ -193,6 +222,18 @@ const Friendship: React.FC = () => {
     console.log('Xóa bạn bè:', friendId);
     // TODO: API call để xóa bạn bè
     setFriends(prev => prev.filter(friend => friend.id !== friendId));
+  };
+
+  const messageFriend = async (friendId: string) => {
+    try {
+      const me = getUserInfo();
+      if (!me?.id) return alert('Vui lòng đăng nhập lại');
+      await ensureConversation(me.id, friendId);
+      navigate('/chat');
+    } catch (e) {
+      console.error('Mở chat thất bại', e);
+      alert('Không thể mở chat, vui lòng thử lại.');
+    }
   };
 
   const getStatusText = (status: string) => {
@@ -265,7 +306,7 @@ const Friendship: React.FC = () => {
                       </p>
                     </div>
                     <div className="friend-actions">
-                      <button className="btn-message">Nhắn tin</button>
+                      <button className="btn-message" onClick={() => messageFriend(friend.id)}>Nhắn tin</button>
                       <button 
                         className="btn-remove"
                         onClick={() => removeFriend(friend.id)}
