@@ -11,7 +11,8 @@ import {
   acceptFriendRequest as acceptFriendRequestApi,
   rejectFriendRequest as rejectFriendRequestApi,
   getFriendRequestsList,
-  getFriendsList
+  getFriendsList,
+  unfriend
 } from '../../api/user/friendshipApi';
 import { getUserInfo } from '../../api/user/loginApi';
 import './Friendship.css';
@@ -62,6 +63,23 @@ const Friendship: React.FC = () => {
             const payload = JSON.parse(msg.body);
             console.log('New conversation notification:', payload);
             // Optionally: update UI or navigate to chat
+          } catch (e) { console.error(e); }
+        });
+
+        // Subscribe to friend request updates (including unfriend notifications)
+        wsSubscribe(`/topic/friend-requests/${currentUserId}`, (msg) => {
+          try {
+            const payload = JSON.parse(msg.body);
+            console.log('Friend request notification:', payload);
+            
+            // If status is UNFRIENDED, remove from friends list
+            if (payload.status === 'UNFRIENDED') {
+              setFriends(prev => prev.filter(f => f.id !== payload.userId));
+              console.log('Friend removed via WebSocket:', payload.userId);
+            } else {
+              // Reload friend requests for other status changes
+              loadFriendRequestsFromApi();
+            }
           } catch (e) { console.error(e); }
         });
       }
@@ -218,10 +236,28 @@ const Friendship: React.FC = () => {
     }
   };
 
-  const removeFriend = (friendId: string) => {
-    console.log('Xóa bạn bè:', friendId);
-    // TODO: API call để xóa bạn bè
-    setFriends(prev => prev.filter(friend => friend.id !== friendId));
+  const removeFriend = async (friendId: string) => {
+    const friend = friends.find(f => f.id === friendId);
+    const friendName = friend ? `${friend.firstName} ${friend.lastName}` : 'bạn bè này';
+    
+    if (!window.confirm(`Bạn có chắc muốn hủy kết bạn với ${friendName}?`)) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await unfriend(friendId);
+      
+      // Remove from local state
+      setFriends(prev => prev.filter(friend => friend.id !== friendId));
+      
+      alert('Đã hủy kết bạn thành công!');
+    } catch (error: any) {
+      console.error('Unfriend error:', error);
+      alert(error.message || 'Không thể hủy kết bạn. Vui lòng thử lại!');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const messageFriend = async (friendId: string) => {
@@ -378,7 +414,7 @@ const Friendship: React.FC = () => {
                 onChange={(e) => handleSearch(e.target.value)}
                 className="search-input"
               />
-              <div className="search-icon">🔍</div>
+              {/* <div className="search-icon">🔍</div> */}
             </div>
 
             {searchError && (

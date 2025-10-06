@@ -35,7 +35,7 @@ const Header: React.FC = () => {
 				<a href="/" className="header-link">Trang chủ</a>
 				{isUserLoggedIn ? (
 					<>
-						<span className="header-welcome">Xin chào, {userInfo?.username || 'User'}!</span>
+						<NavLink to={`/user/${userInfo?.id}`} className="header-link">Xin chào, {userInfo?.username || 'User'}!</NavLink>
 						<NavLink to="/chat" className="header-link">Chat</NavLink>
                         <NavLink to="/friends" className="header-link">Bạn bè</NavLink>
 						<button onClick={handleLogout} className="header-link logout-btn">Đăng xuất</button>

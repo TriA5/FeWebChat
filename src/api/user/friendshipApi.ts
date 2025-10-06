@@ -11,7 +11,7 @@ export interface SearchUserResponse {
   email: string;
   phoneNumber: string;
   avatar: string;
-  dateOfBirth: [number, number, number]; // [year, month, day]
+  dateOfBirth: string | [number, number, number]; // "yyyy-MM-dd" string or [year, month, day] array for backward compatibility
   gender: boolean; // true: male, false: female
 }
 
@@ -90,10 +90,21 @@ export const searchUserByPhone = async (phoneNumber: string): Promise<SearchResu
     
     console.log('API response userData:', userData); // Debug log
     
-    // Calculate age from dateOfBirth
-    const calculateAge = (birthDate: [number, number, number]): number => {
-      const [year, month, day] = birthDate;
-      const birth = new Date(year, month - 1, day); // month is 0-indexed in JS
+    // Calculate age from dateOfBirth (supports both string and array formats)
+    const calculateAge = (birthDate: string | [number, number, number]): number => {
+      let birth: Date;
+      
+      if (typeof birthDate === 'string') {
+        // Handle string format "yyyy-MM-dd"
+        console.log('📅 Calculating age from string:', birthDate);
+        birth = new Date(birthDate);
+      } else {
+        // Handle array format [year, month, day]
+        const [year, month, day] = birthDate;
+        console.log('📅 Calculating age from array:', { year, month, day });
+        birth = new Date(year, month - 1, day); // month is 0-indexed in JS
+      }
+      
       const today = new Date();
       let age = today.getFullYear() - birth.getFullYear();
       const monthDiff = today.getMonth() - birth.getMonth();
@@ -101,6 +112,8 @@ export const searchUserByPhone = async (phoneNumber: string): Promise<SearchResu
       if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
         age--;
       }
+      
+      console.log('🎂 Calculated age:', age, '(Birth:', birth.toLocaleDateString(), ')');
       
       return age;
     };
@@ -409,5 +422,41 @@ export const getFriendRequestsList = async (): Promise<SearchResult[]> => {
   } catch (error) {
     console.error('Get friend requests list error:', error);
     return [];
+  }
+};
+
+// Unfriend - Hủy kết bạn
+export const unfriend = async (friendId: string): Promise<boolean> => {
+  try {
+    const currentUser = getUserInfo();
+    if (!currentUser || !currentUser.id) {
+      throw new Error('Không tìm thấy thông tin người dùng');
+    }
+
+    const token = getToken();
+    if (!token) {
+      throw new Error('Không tìm thấy token xác thực');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/friendships/unfriend?userId=${encodeURIComponent(currentUser.id)}&friendId=${encodeURIComponent(friendId)}`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Không thể hủy kết bạn');
+    }
+
+    console.log('Unfriend successful for friend:', friendId);
+    return true;
+
+  } catch (error) {
+    console.error('Unfriend error:', error);
+    throw error;
   }
 };

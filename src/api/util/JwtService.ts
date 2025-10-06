@@ -10,12 +10,18 @@ export interface JwtPayload {
   exp: number; // expiration
 }
 
-// JWT decode helper (simple implementation)
+// JWT decode helper (Base64Url -> Base64 -> JSON)
 const base64UrlDecode = (str: string): string => {
   // Replace non-url compatible chars with base64 standard chars
-  str = (str + '===').slice(0, str.length + (str.length % 4));
-  str = str.replace(/-/g, '+').replace(/_/g, '/');
-  return atob(str);
+  let output = str.replace(/-/g, '+').replace(/_/g, '/');
+
+  // Pad with '=' if not a multiple of 4
+  const pad = output.length % 4;
+  if (pad) {
+    output += '='.repeat(4 - pad);
+  }
+
+  return atob(output);
 };
 
 export const decodeJWT = (token: string): JwtPayload | null => {

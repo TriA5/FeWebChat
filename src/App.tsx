@@ -10,6 +10,8 @@ import HomePage from './layouts/Home/HomePage';
 import Header from './layouts/header-footer/Header';
 import Footer from './layouts/header-footer/Footer';
 import PathActivationPage from './layouts/user/PathActivationPage';
+import ProfileDetail from './layouts/user/ProfileDetail';
+import GroupMembersPage from './layouts/user/GroupMembersPage';
 
 function App() {
   return (
@@ -22,7 +24,11 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/friends" element={<Friendship />} />
         <Route path="/chat" element={<Chat />} />
+        <Route path="/groups/:groupId/members" element={<GroupMembersPage />} />
         <Route path="/active/:email/:code" element={<PathActivationPage />} />
+        <Route path="/user/:id" element={<ProfileDetail />} />
+        {/* <Route path="/" element={<ProfileDetail />} /> */}
+        
       </Routes>
       <Footer />
     </div>
