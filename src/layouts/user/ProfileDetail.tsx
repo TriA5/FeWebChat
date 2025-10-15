@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import axios from "axios"; // still used for initial fetch only
 import { useParams } from "react-router-dom";
 import {
@@ -12,11 +12,18 @@ import {
   Edit,
   Save,
   X,
+  Users,
+  MessageCircle,
+  MoreHorizontal,
+  UserPlus,
+  Image as ImageIcon,
+  Plus,
 } from "lucide-react";
 import { getUserInfo } from '../../api/user/loginApi';
 import { changeAvatar } from '../../api/user/avatarApi';
 import { updateUserProfile, UpdateProfileRequest as UpdateProfilePayload } from '../../api/user/profileApi';
 import "./ProfileDetail.css";
+import Header from "../header-footer/Header";
 
 interface UserDetail {
   idUser: string;
@@ -298,6 +305,59 @@ const ProfileDetail: React.FC = () => {
     setToasts(prev => prev.filter(t=>t.id!==id));
   };
 
+  const fullName = useMemo(() => {
+    if (!user) return "";
+    const merged = `${user.firstName || ""} ${user.lastName || ""}`.trim();
+    return merged || user.username;
+  }, [user]);
+
+  const aboutItems = useMemo(
+    () =>
+      user
+        ? [
+            { icon: UserIcon, label: "Họ và tên", value: fullName || "Chưa cập nhật" },
+            { icon: Hash, label: "Tên người dùng", value: user.username ? `@${user.username}` : "Chưa cập nhật" },
+            { icon: Mail, label: "Email", value: user.email || "Chưa cập nhật" },
+            { icon: Phone, label: "Điện thoại", value: user.phoneNumber || "Chưa cập nhật" },
+            { icon: UserIcon, label: "Giới tính", value: user.gender ? "Nam" : "Nữ" },
+            { icon: Calendar, label: "Ngày sinh", value: user.dateOfBirth || "Chưa cập nhật" },
+            { icon: ShieldCheck, label: "Tài khoản", value: user.status ? "Đã xác thực" : "Chưa xác thực" },
+            { icon: Clock, label: "Ngày tạo", value: formatDate(user.createdAt) },
+            { icon: Clock, label: "Cập nhật cuối", value: formatDate(user.updatedAt) },
+          ]
+        : [],
+    [user, fullName]
+  );
+
+  const friendCount = useMemo(() => Math.max(0, Math.round(Math.random() * 200 + 150)), []);
+  const mutualFriends = useMemo(() => Math.max(4, Math.round(Math.random() * 20)), []);
+
+  const samplePosts = useMemo(
+    () => [
+      {
+        id: 1,
+        audience: "Công khai",
+        time: "2 giờ trước",
+        content: "Một buổi chiều tuyệt đẹp cùng team chạy bộ ở công viên! Ai muốn tham gia cùng tụi mình không? 🏃‍♂️",
+        image: "https://images.unsplash.com/photo-1520962917967-32fa1234121d?auto=format&fit=crop&w=1200&q=80",
+        reactions: 134,
+        comments: 42,
+        shares: 9,
+      },
+      {
+        id: 2,
+        audience: "Bạn bè",
+        time: "Hôm qua",
+        content: "Đang tập dự án cá nhân với React và Spring Boot, tiến độ khá ổn! Ai có tips tối ưu performance không nè?",
+        image: "",
+        reactions: 88,
+        comments: 27,
+        shares: 4,
+      },
+    ],
+    []
+  );
+
   if (loading) {
     return (
       <div className="loading-container">
@@ -321,45 +381,67 @@ const ProfileDetail: React.FC = () => {
   }
 
   return (
-    <div className="profile-container">
-      <div className="profile-card">
-        {/* Toasts */}
-        <div className="toast-container" aria-live="polite" aria-atomic="true">
-          {toasts.map(t => (
-            <div key={t.id} className={`toast toast-${t.type}`} role="alert">
-              <div style={{flex:1}}>{t.text}</div>
-              <button onClick={()=>dismissToast(t.id)} style={{background:'transparent',border:'none',color:'#64748b',cursor:'pointer',fontSize:'14px'}}>✕</button>
-            </div>
-          ))}
-        </div>
-        {/* Header with Avatar and Basic Info */}
-        <div className="profile-header">
+    <div className="fb-profile">
+      <div className="toast-container" aria-live="polite" aria-atomic="true">
+        {toasts.map(t => (
+          <div key={t.id} className={`toast toast-${t.type}`} role="alert">
+            <div className="toast__text">{t.text}</div>
+            <button
+              type="button"
+              className="toast__close"
+              onClick={() => dismissToast(t.id)}
+              aria-label="Đóng thông báo"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="fb-profile__cover">
+        <div className="fb-profile__cover-image" />
+        {isOwnProfile && (
+          <button type="button" className="fb-btn fb-btn--cover">
+            <ImageIcon size={16} />
+            <span>Chỉnh sửa ảnh bìa</span>
+          </button>
+        )}
+      </div>
+
+      <div className="fb-profile__top">
+        <div className="fb-profile__avatar-col">
           <div className="avatar-container">
             <img
               src={
-                avatarPreview ? avatarPreview : (user.avatar && user.avatar.trim() !== ""
+                avatarPreview
+                  ? avatarPreview
+                  : user.avatar && user.avatar.trim() !== ""
                   ? user.avatar
-                  : "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQQEjGbsTwEJ2n8tZOeJWLkCivjuYDJBxQbIg&s")
+                  : "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQQEjGbsTwEJ2n8tZOeJWLkCivjuYDJBxQbIg&s"
               }
-              alt="Avatar"
-              className={"avatar" + (isOwnProfile ? ' avatar-hover' : '')}
+              alt="Ảnh đại diện"
+              className={"avatar" + (isOwnProfile ? " avatar-hover" : "")}
               onClick={triggerAvatarSelect}
-              title={isOwnProfile ? 'Nhấp để đổi avatar' : ''}
+              title={isOwnProfile ? "Nhấp để đổi avatar" : ""}
             />
             {isOwnProfile && (
-              <div className={`avatar-overlay ${avatarUploading ? 'avatar-uploading' : ''}`}> 
-                {avatarUploading ? <div className="avatar-progress"/> : <span>{isChangingAvatar ? 'Lưu hoặc huỷ' : 'Đổi ảnh'}</span>} 
+              <div className={`avatar-overlay ${avatarUploading ? "avatar-uploading" : ""}`}>
+                {avatarUploading ? <div className="avatar-progress" /> : <span>{isChangingAvatar ? "Lưu hoặc huỷ" : "Đổi ảnh"}</span>}
               </div>
             )}
             {isOwnProfile && !isChangingAvatar && (
-              <button type="button" className="avatar-change-btn" onClick={triggerAvatarSelect}>Đổi</button>
+              <button type="button" className="avatar-change-btn" onClick={triggerAvatarSelect}>
+                Đổi
+              </button>
             )}
             {isChangingAvatar && (
               <div className="avatar-actions">
                 <button type="button" disabled={avatarUploading} onClick={handleUploadAvatar} className="save-avatar-btn">
-                  {avatarUploading ? 'Đang lưu...' : 'Lưu'}
+                  {avatarUploading ? "Đang lưu..." : "Lưu"}
                 </button>
-                <button type="button" disabled={avatarUploading} onClick={handleCancelAvatar} className="cancel-avatar-btn">Hủy</button>
+                <button type="button" disabled={avatarUploading} onClick={handleCancelAvatar} className="cancel-avatar-btn">
+                  Hủy
+                </button>
               </div>
             )}
             <input
@@ -367,204 +449,315 @@ const ProfileDetail: React.FC = () => {
               ref={fileInputRef}
               accept="image/*"
               className="visually-hidden"
-              aria-label="Chọn ảnh đại diện"
+              aria-labelledby="avatar-upload"
+              title="Chọn ảnh đại diện"
+              placeholder="Chọn ảnh đại diện"
               onChange={handleAvatarFileChange}
             />
-            <div className={`status-indicator ${user.status ? 'status-online' : 'status-offline'}`}></div>
+            <div className={`status-indicator ${user.status ? "status-online" : "status-offline"}`} />
           </div>
-          
-          <h1 className="profile-name">
-            {user.firstName} {user.lastName}
-          </h1>
-          <p className="profile-username">{user.username}</p>
-          
-          <div className="status-badges">
-            <span className={`badge ${user.enabled ? 'badge-enabled' : 'badge-disabled'}`}>
+        </div>
+        <div className="fb-profile__info-col">
+          <h1 className="fb-profile__name">{fullName}</h1>
+          <div className="fb-profile__meta">
+            {/* <span className="fb-profile__username">{user.username}</span> */}
+            <span className="fb-profile__friends">
+              <Users size={16} />
+              <span>{friendCount.toLocaleString("vi-VN")} bạn bè</span>
+              <span className="dot">•</span>
+              <span>{mutualFriends} bạn chung</span>
+            </span>
+          </div>
+          <div className="fb-profile__badges">
+            <span className={`fb-badge ${user.enabled ? "fb-badge--success" : "fb-badge--danger"}`}>
               {user.enabled ? "Hoạt động" : "Khóa"}
             </span>
-            <span className="badge badge-gender">
-              {user.gender ? "Nam" : "Nữ"}
-            </span>
+            <span className="fb-badge fb-badge--muted">{user.gender ? "Nam" : "Nữ"}</span>
           </div>
-          
-          {/* Edit button for own profile */}
-          {isOwnProfile && (
-            <div className="profile-actions">
+        </div>
+        <div className="fb-profile__actions">
+          {isOwnProfile ? (
+            <div className="fb-profile__action-group">
               {!isEditing ? (
-                <button onClick={handleEdit} className="edit-btn">
+                <button type="button" className="fb-btn fb-btn--primary" onClick={handleEdit}>
                   <Edit size={16} />
-                  Chỉnh sửa thông tin
+                  <span>Chỉnh sửa trang cá nhân</span>
                 </button>
               ) : (
-                <div className="edit-actions">
-                  <button onClick={handleSave} disabled={updateLoading} className="save-btn">
+                <div className="fb-profile__action-edit">
+                  <button type="button" className="fb-btn fb-btn--primary" onClick={handleSave} disabled={updateLoading}>
                     <Save size={16} />
-                    {updateLoading ? 'Lưu...' : 'Lưu'}
+                    <span>{updateLoading ? "Đang lưu..." : "Lưu thay đổi"}</span>
                   </button>
-                  <button onClick={handleCancel} className="cancel-btn">
+                  <button type="button" className="fb-btn fb-btn--light" onClick={handleCancel}>
                     <X size={16} />
-                    Hủy
+                    <span>Hủy</span>
                   </button>
                 </div>
               )}
+              <button type="button" className="fb-btn fb-btn--light">
+                <Plus size={16} />
+                <span>Thêm vào tin</span>
+              </button>
+            </div>
+          ) : (
+            <div className="fb-profile__action-group">
+              <button type="button" className="fb-btn fb-btn--primary">
+                <UserPlus size={16} />
+                <span>Thêm bạn bè</span>
+              </button>
+              <button type="button" className="fb-btn fb-btn--secondary">
+                <MessageCircle size={16} />
+                <span>Nhắn tin</span>
+              </button>
+              <button type="button" className="fb-btn fb-btn--icon" aria-label="Tùy chọn khác">
+                <MoreHorizontal size={18} />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="fb-profile__tabs" role="tablist">
+        <button type="button" className="fb-profile__tab fb-profile__tab--active" role="tab" aria-selected="true">
+          Bài viết
+        </button>
+        <button type="button" className="fb-profile__tab" role="tab">
+          Chi tiết về Dương Thuận Tri
+        </button>
+        <button type="button" className="fb-profile__tab" role="tab">
+          Bạn bè
+        </button>
+        <button type="button" className="fb-profile__tab" role="tab">
+          Ảnh
+        </button>
+        <button type="button" className="fb-profile__tab" role="tab">
+          Video
+        </button>
+        <button type="button" className="fb-profile__tab" role="tab">
+          Xem thêm
+        </button>
+      </div>
+
+      <div className="fb-profile__layout">
+        <aside className="fb-profile__sidebar">
+          {isEditing ? (
+            <div className="fb-card fb-profile__edit-card">
+              <div className="fb-card__header">
+                <h2>Chỉnh sửa thông tin</h2>
+              </div>
+              <div className="fb-profile__edit-body">
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-first-name">Họ</label>
+                    <input
+                      id="profile-first-name"
+                      type="text"
+                      name="firstName"
+                      value={editData.firstName}
+                      onChange={handleInputChange}
+                      className={`form-input${fieldErrors.firstName ? " error" : ""}`}
+                      placeholder="Nhập họ của bạn"
+                      title="Họ"
+                    />
+                    {fieldErrors.firstName && <div className="field-error">{fieldErrors.firstName}</div>}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-last-name">Tên</label>
+                    <input
+                      id="profile-last-name"
+                      type="text"
+                      name="lastName"
+                      value={editData.lastName}
+                      onChange={handleInputChange}
+                      className={`form-input${fieldErrors.lastName ? " error" : ""}`}
+                      placeholder="Nhập tên của bạn"
+                      title="Tên"
+                    />
+                    {fieldErrors.lastName && <div className="field-error">{fieldErrors.lastName}</div>}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-phone-number">Số điện thoại</label>
+                    <input
+                      id="profile-phone-number"
+                      type="tel"
+                      name="phoneNumber"
+                      value={editData.phoneNumber}
+                      onChange={handleInputChange}
+                      className={`form-input${fieldErrors.phoneNumber ? " error" : ""}`}
+                      placeholder="0909123456"
+                      title="Số điện thoại"
+                    />
+                    {fieldErrors.phoneNumber && <div className="field-error">{fieldErrors.phoneNumber}</div>}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-dob">Ngày sinh</label>
+                    <input
+                      id="profile-dob"
+                      type="date"
+                      name="dateOfBirth"
+                      value={formatDateForInput(editData.dateOfBirth)}
+                      onChange={handleInputChange}
+                      className={`form-input${fieldErrors.dateOfBirth ? " error" : ""}`}
+                    />
+                    {fieldErrors.dateOfBirth && <div className="field-error">{fieldErrors.dateOfBirth}</div>}
+                  </div>
+                  <div className="form-group">
+                    <span className="form-label">Giới tính</span>
+                    <div className="radio-group">
+                      <label className="radio-option">
+                        <input
+                          type="radio"
+                          name="gender"
+                          checked={editData.gender === true}
+                          onChange={() => handleGenderChange(true)}
+                        />
+                        <span>Nam</span>
+                      </label>
+                      <label className="radio-option">
+                        <input
+                          type="radio"
+                          name="gender"
+                          checked={editData.gender === false}
+                          onChange={() => handleGenderChange(false)}
+                        />
+                        <span>Nữ</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div className="fb-profile__edit-actions">
+                  <button type="button" className="fb-btn fb-btn--primary" onClick={handleSave} disabled={updateLoading}>
+                    {updateLoading ? "Đang lưu..." : "Lưu thay đổi"}
+                  </button>
+                  <button type="button" className="fb-btn fb-btn--light" onClick={handleCancel} disabled={updateLoading}>
+                    Hủy
+                  </button>
+                </div>
+                {message.text && <div className={`profile-message ${message.type}`}>{message.text}</div>}
+              </div>
+            </div>
+          ) : (
+            <div className="fb-card fb-profile__about-card">
+              <div className="fb-card__header">
+                <h2>Giới thiệu</h2>
+                {isOwnProfile && (
+                  <button type="button" className="fb-link-button" onClick={handleEdit}>
+                    Chỉnh sửa
+                  </button>
+                )}
+              </div>
+              <ul className="fb-profile__about-list">
+                {aboutItems.map(item => (
+                  <li key={item.label}>
+                    <item.icon size={18} />
+                    <div>
+                      <span className="label">{item.label}</span>
+                      <span className="value">{item.value || "Chưa cập nhật"}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           
-          {/* Message display */}
-          {message.text && (
-            <div className={`profile-message ${message.type}`}>
-              {message.text}
+
+          {/* <section className="fb-card fb-profile__photos">
+            <div className="fb-card__header">
+              <h2>Ảnh</h2>
+              <button type="button" className="fb-link-button">Xem tất cả</button>
+            </div>
+            <div className="fb-photos-grid">
+              {samplePhotos.map((photo, index) => (
+                <img key={index} src={photo} alt={`Ảnh ${index + 1}`} />
+              ))}
+            </div>
+          </section>
+
+          <section className="fb-card fb-profile__friends">
+            <div className="fb-card__header">
+              <h2>Bạn bè</h2>
+              <span>{friendCount.toLocaleString("vi-VN")} người bạn</span>
+            </div>
+            <div className="fb-friends-grid">
+              {sampleFriends.map(friend => (
+                <div key={friend.id} className="fb-friend">
+                  <img src={friend.avatar} alt={friend.name} />
+                  <span>{friend.name}</span>
+                </div>
+              ))}
+            </div>
+          </section> */}
+        </aside>
+
+        <section className="fb-profile__main">
+          {isOwnProfile && (
+            <div className="fb-card fb-profile__composer">
+              <div className="fb-profile__composer-top">
+                <img
+                  src={
+                    avatarPreview
+                      ? avatarPreview
+                      : user.avatar && user.avatar.trim() !== ""
+                      ? user.avatar
+                      : "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQQEjGbsTwEJ2n8tZOeJWLkCivjuYDJBxQbIg&s"
+                  }
+                  alt="Ảnh đại diện của bạn"
+                />
+                <button type="button">Bạn đang nghĩ gì thế?</button>
+              </div>
+              <div className="fb-profile__composer-actions">
+                <button type="button">🎥 Video trực tiếp</button>
+                <button type="button">📷 Ảnh/video</button>
+                <button type="button">😊 Cảm xúc/hoạt động</button>
+              </div>
             </div>
           )}
-        </div>
 
-        {/* Content Grid */}
-        <div className="profile-content">
-          {/* Personal Information */}
-          <div className="info-section">
-            <h2 className="section-title">
-              <div className="section-icon">
-                <UserIcon size={20} />
-              </div>
-              Thông tin cá nhân
-            </h2>
-            
-            {!isEditing ? (
-              <>
-                <div className="info-item">
-                  <Mail className="info-icon" />
-                  <span className="info-label">Email:</span>
-                  <span className="info-value">{user.email || "Chưa cập nhật"}</span>
-                </div>
-                
-                <div className="info-item">
-                  <Phone className="info-icon" />
-                  <span className="info-label">Số điện thoại:</span>
-                  <span className="info-value">{user.phoneNumber || "Chưa cập nhật"}</span>
-                </div>
-                
-                <div className="info-item">
-                  <Calendar className="info-icon" />
-                  <span className="info-label">Sinh nhật:</span>
-                  <span className="info-value">{user.dateOfBirth || "Chưa cập nhật"}</span>
-                </div>
-              </>
-            ) : (
-              <div className="edit-form">
-                <div className="form-group">
-                  <label className="form-label">Họ:</label>
-                  <input
-                    type="text"
-                    name="firstName"
-                    value={editData.firstName}
-                    onChange={handleInputChange}
-                    className={`form-input${fieldErrors.firstName ? ' error' : ''}`}
-                    placeholder="Nhập họ của bạn"
+          
+
+          <div className="fb-profile__posts">
+            {samplePosts.map(post => (
+              <article key={post.id} className="fb-card fb-post-card">
+                <header className="fb-post-card__header">
+                  <img
+                    src={user.avatar && user.avatar.trim() !== "" ? user.avatar : "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQQEjGbsTwEJ2n8tZOeJWLkCivjuYDJBxQbIg&s"}
+                    alt={fullName}
                   />
-                  {fieldErrors.firstName && <div className="field-error">{fieldErrors.firstName}</div>}
-                </div>
-                
-                <div className="form-group">
-                  <label className="form-label">Tên:</label>
-                  <input
-                    type="text"
-                    name="lastName"
-                    value={editData.lastName}
-                    onChange={handleInputChange}
-                    className={`form-input${fieldErrors.lastName ? ' error' : ''}`}
-                    placeholder="Nhập tên của bạn"
-                  />
-                  {fieldErrors.lastName && <div className="field-error">{fieldErrors.lastName}</div>}
-                </div>
-                
-                <div className="form-group">
-                  <label className="form-label">Số điện thoại:</label>
-                  <input
-                    type="tel"
-                    name="phoneNumber"
-                    value={editData.phoneNumber}
-                    onChange={handleInputChange}
-                    className={`form-input${fieldErrors.phoneNumber ? ' error' : ''}`}
-                    placeholder="0909123456"
-                  />
-                  {fieldErrors.phoneNumber && <div className="field-error">{fieldErrors.phoneNumber}</div>}
-                </div>
-                
-                <div className="form-group">
-                  <label className="form-label">Ngày sinh:</label>
-                  <input
-                    type="date"
-                    name="dateOfBirth"
-                    value={formatDateForInput(editData.dateOfBirth)}
-                    onChange={handleInputChange}
-                    className={`form-input${fieldErrors.dateOfBirth ? ' error' : ''}`}
-                  />
-                  {fieldErrors.dateOfBirth && <div className="field-error">{fieldErrors.dateOfBirth}</div>}
-                </div>
-                
-                <div className="form-group">
-                  <label className="form-label">Giới tính:</label>
-                  <div className="radio-group">
-                    <label className="radio-option">
-                      <input
-                        type="radio"
-                        name="gender"
-                        checked={editData.gender === true}
-                        onChange={() => handleGenderChange(true)}
-                      />
-                      <span>Nam</span>
-                    </label>
-                    <label className="radio-option">
-                      <input
-                        type="radio"
-                        name="gender"
-                        checked={editData.gender === false}
-                        onChange={() => handleGenderChange(false)}
-                      />
-                      <span>Nữ</span>
-                    </label>
+                  <div>
+                    <strong>{fullName}</strong>
+                    <div className="fb-post-card__meta">
+                      <span>{post.time}</span>
+                      <span>·</span>
+                      <span>{post.audience}</span>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
+                  <button type="button" className="fb-post-card__more" aria-label="Tùy chọn khác">
+                    ···
+                  </button>
+                </header>
+                <p className="fb-post-card__content">{post.content}</p>
+                {post.image && (
+                  <figure className="fb-post-card__image">
+                    <img src={post.image} alt="Bài viết" />
+                  </figure>
+                )}
+                <footer className="fb-post-card__footer">
+                  <div className="fb-post-card__stats">
+                    <span>👍 {post.reactions.toLocaleString("vi-VN")}</span>
+                    <span>{post.comments} bình luận</span>
+                    <span>{post.shares} lượt chia sẻ</span>
+                  </div>
+                  <div className="fb-post-card__actions">
+                    <button type="button">👍 Thích</button>
+                    <button type="button">💬 Bình luận</button>
+                    <button type="button">↗️ Chia sẻ</button>
+                  </div>
+                </footer>
+              </article>
+            ))}
           </div>
-
-          {/* Account Information */}
-          <div className="info-section">
-            <h2 className="section-title">
-              <div className="section-icon">
-                <ShieldCheck size={20} />
-              </div>
-              Thông tin tài khoản
-            </h2>
-            
-            <div className="info-item">
-              <Hash className="info-icon" />
-              <span className="info-label">ID người dùng:</span>
-              <span className="info-value">{user.idUser.substring(0, 8)}...</span>
-            </div>
-            
-            <div className="info-item">
-              <ShieldCheck className="info-icon" />
-              <span className="info-label">Trạng thái:</span>
-              <span className="info-value">
-                {user.status ? "Đã xác thực" : "Chưa xác thực"}
-              </span>
-            </div>
-            
-            <div className="info-item">
-              <Clock className="info-icon" />
-              <span className="info-label">Ngày tạo:</span>
-              <span className="info-value">{formatDate(user.createdAt)}</span>
-            </div>
-            
-            <div className="info-item">
-              <Clock className="info-icon" />
-              <span className="info-label">Cập nhật cuối:</span>
-              <span className="info-value">{formatDate(user.updatedAt)}</span>
-            </div>
-          </div>
-        </div>
+        </section>
       </div>
     </div>
   );

@@ -1,50 +1,108 @@
 import SockJS from 'sockjs-client';
-import { Client, IMessage, Stomp } from '@stomp/stompjs';
-import { getToken } from '../util/JwtService';
+import { Client, IMessage } from '@stomp/stompjs';
 
 let client: Client | null = null;
 const pendingSends: Array<{ destination: string; body: any }> = [];
+const connectCallbacks: Array<() => void> = [];
 
-export function connect(onConnect?: () => void, onError?: (err: any) => void) {
-  if (client && client.connected) {
-    onConnect && onConnect();
-    return client;
-  }
-  const token = getToken();
-  if (!token) {
-    onError && onError('No JWT token found');
-    return null;
-  }
-  const socket = new SockJS('http://localhost:8080/ws');
-  client = Stomp.over(socket as any);
-  client.connectHeaders = { Authorization: `Bearer ${token}` };
-  client.reconnectDelay = 5000;
-  client.onConnect = () => {
-    // Flush pending sends
-    while (pendingSends.length) {
-      const msg = pendingSends.shift()!;
-      try {
-        client!.publish({ destination: msg.destination, body: JSON.stringify(msg.body) });
-      } catch (e) {
-        console.error('Failed to flush pending message', e);
+// Create client only once
+function createClient() {
+  if (client) return client;
+  
+  console.log('🔌 Creating new WebSocket client...');
+  
+  client = new Client({
+    brokerURL: undefined, // We'll use webSocketFactory instead
+    webSocketFactory: () => new SockJS('http://localhost:8080/ws') as any,
+    reconnectDelay: 5000,
+    heartbeatIncoming: 4000,
+    heartbeatOutgoing: 4000,
+    debug: (str) => {
+      // Uncomment for detailed STOMP debugging
+      // console.log('STOMP:', str);
+    },
+    onConnect: () => {
+      console.log('✅ WebSocket CONNECTED');
+      
+      // Flush pending sends
+      while (pendingSends.length) {
+        const msg = pendingSends.shift()!;
+        try {
+          client!.publish({ destination: msg.destination, body: JSON.stringify(msg.body) });
+        } catch (e) {
+          console.error('Failed to flush pending message', e);
+        }
       }
+      
+      // Call all pending callbacks
+      while (connectCallbacks.length) {
+        const cb = connectCallbacks.shift()!;
+        try {
+          cb();
+        } catch (e) {
+          console.error('Error in connect callback:', e);
+        }
+      }
+    },
+    onStompError: (frame) => {
+      console.error('❌ STOMP error:', frame.headers['message']);
+      console.error('Details:', frame.body);
+    },
+    onWebSocketClose: () => {
+      console.warn('⚠️ WebSocket connection closed');
+    },
+    onWebSocketError: (error) => {
+      console.error('❌ WebSocket error:', error);
     }
-    onConnect && onConnect();
-  };
-  client.onStompError = (frame) => {
-    console.error('STOMP error:', frame);
-    onError && onError(frame);
-  };
-  client.activate();
+  });
+  
   return client;
 }
 
+export function connect(onConnect?: () => void, onError?: (err: any) => void) {
+  const currentClient = createClient();
+  
+  if (currentClient.connected) {
+    console.log('✅ Already connected');
+    onConnect && onConnect();
+    return currentClient;
+  }
+  
+  // Add callback to queue if provided
+  if (onConnect) {
+    connectCallbacks.push(onConnect);
+  }
+  
+  // Activate if not already active
+  if (!currentClient.active) {
+    console.log('🚀 Activating WebSocket connection...');
+    currentClient.activate();
+  } else {
+    console.log('⏳ WebSocket connection in progress...');
+  }
+  
+  return currentClient;
+}
+
 export function subscribe(destination: string, callback: (message: IMessage) => void) {
-  if (!client || !client.connected) {
-    console.error('WebSocket not connected');
+  const currentClient = createClient();
+  
+  if (!currentClient.connected) {
+    console.warn('⚠️ WebSocket not connected yet. Waiting for connection before subscribe:', destination);
+    
+    // Wait for connection then subscribe
+    connect(() => {
+      if (currentClient && currentClient.connected) {
+        console.log('✅ Now subscribing to:', destination);
+        currentClient.subscribe(destination, callback);
+      }
+    });
+    
     return null;
   }
-  return client.subscribe(destination, callback);
+  
+  console.log('✅ Subscribing to:', destination);
+  return currentClient.subscribe(destination, callback);
 }
 
 export function send(destination: string, body: any) {
@@ -62,4 +120,8 @@ export function disconnect() {
     client.deactivate();
     client = null;
   }
+}
+
+export function getClient() {
+  return client;
 }

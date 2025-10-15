@@ -1,0 +1,417 @@
+/* Group Video Call Overlay */
+.group-video-call-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.group-video-call-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #1a1a1a;
+}
+
+/* Header */
+.call-header {
+  background: rgba(0, 0, 0, 0.8);
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: white;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.call-info {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.group-name {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.participant-count {
+  font-size: 14px;
+  opacity: 0.8;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px 12px;
+  border-radius: 12px;
+}
+
+.minimize-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  color: white;
+  cursor: pointer;
+  font-size: 20px;
+  transition: background 0.2s ease;
+}
+
+.minimize-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Video Grid */
+.video-grid {
+  flex: 1;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  background: #000;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+}
+
+/* Grid layouts based on number of participants */
+.video-grid {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+/* 1 person: full screen */
+.video-grid:has(.video-container:nth-child(1):last-child) {
+  grid-template-columns: 1fr;
+}
+
+/* 2 people: side by side */
+.video-grid:has(.video-container:nth-child(2):last-child) {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* 3 people: 3 columns (1 row) */
+.video-grid:has(.video-container:nth-child(3):last-child) {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* 4 people: 2x2 grid */
+.video-grid:has(.video-container:nth-child(4):last-child) {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* 5-6 people: 3x2 grid */
+.video-grid:has(.video-container:nth-child(5)),
+.video-grid:has(.video-container:nth-child(6):last-child) {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* 7+ people: 3 columns */
+.video-grid:has(.video-container:nth-child(7)) {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* Video Container */
+.video-container {
+  position: relative;
+  background: #2a2a2a;
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 4/3;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-container.local {
+  border: 2px solid #4CAF50;
+}
+
+.video-container.remote {
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+.video-container.local .video-element {
+  transform: scaleX(-1); /* Mirror local video */
+}
+
+/* Better video fit on mobile */
+@media (max-width: 768px) {
+  .video-element {
+    object-fit: contain; /* Show full video without cropping on mobile */
+  }
+}
+
+/* Video Label */
+.video-label {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+}
+
+.connection-status {
+  font-size: 12px;
+  opacity: 0.8;
+  font-style: italic;
+}
+
+/* User Avatar (shown when video is off) */
+.user-avatar {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  display: none;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Video Off Overlay */
+.video-off-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+}
+
+/* Controls */
+.call-controls {
+  background: rgba(0, 0, 0, 0.9);
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.control-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+.control-btn.off {
+  background: rgba(255, 0, 0, 0.3);
+  border-color: rgba(255, 0, 0, 0.5);
+}
+
+.control-btn.end {
+  background: rgba(244, 67, 54, 0.8);
+  border-color: #f44336;
+  padding: 0 20px;
+  width: auto;
+  border-radius: 28px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.control-btn.end:hover {
+  background: #f44336;
+}
+
+.control-btn.leave {
+  background: rgba(255, 152, 0, 0.8);
+  border-color: #ff9800;
+  padding: 0 20px;
+  width: auto;
+  border-radius: 28px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.control-btn.leave:hover {
+  background: #ff9800;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .call-header {
+    padding: 10px 15px;
+  }
+
+  .group-name {
+    font-size: 16px;
+  }
+
+  .participant-count {
+    font-size: 12px;
+    padding: 3px 8px;
+  }
+
+  /* Mobile grid layouts */
+  .video-grid {
+    gap: 8px;
+    padding: 8px;
+    overflow-y: auto;
+  }
+
+  /* 1 person: full screen */
+  .video-grid:has(.video-container:nth-child(1):last-child) {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* 2 people: 2x1 grid (vertical stack) */
+  .video-grid:has(.video-container:nth-child(2):last-child) {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr 1fr;
+  }
+
+  /* 3 people: 2 columns, third video spans both */
+  .video-grid:has(.video-container:nth-child(3):last-child) {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .video-grid:has(.video-container:nth-child(3):last-child) .video-container:nth-child(3) {
+    grid-column: 1 / -1; /* Span full width for third video */
+  }
+
+  /* 4 people: 2x2 grid */
+  .video-grid:has(.video-container:nth-child(4):last-child) {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* 5-6 people: 2x3 grid */
+  .video-grid:has(.video-container:nth-child(5)),
+  .video-grid:has(.video-container:nth-child(6):last-child) {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .video-container {
+    min-height: 120px;
+    aspect-ratio: 16/9;
+  }
+
+  .video-label {
+    font-size: 12px;
+    padding: 4px 8px;
+    bottom: 6px;
+    left: 6px;
+  }
+
+  .connection-status {
+    font-size: 10px;
+  }
+
+  .call-controls {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .control-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+  }
+
+  .control-btn.end,
+  .control-btn.leave {
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  /* User avatar on mobile */
+  .user-avatar {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Extra small screens (portrait phones) */
+@media (max-width: 480px) {
+  .video-container {
+    min-height: 100px;
+  }
+
+  .control-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+
+  .call-controls {
+    gap: 6px;
+    padding: 10px;
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.video-container {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Scrollbar styling */
+.video-grid::-webkit-scrollbar {
+  width: 8px;
+}
+
+.video-grid::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.video-grid::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.video-grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}

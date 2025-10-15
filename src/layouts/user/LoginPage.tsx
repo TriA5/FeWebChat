@@ -52,7 +52,7 @@ const LoginPage: React.FC = () => {
       
       // Redirect sau 2 giây
       setTimeout(() => {
-        window.location.href = '/'; // hoặc sử dụng React Router
+        window.location.href = '/home'; // hoặc sử dụng React Router
       }, 200);
       
     } catch (error: any) {
@@ -68,6 +68,12 @@ const LoginPage: React.FC = () => {
   return (
     <div className="login-container">
       <div className="login-card">
+        <div className="login-logo">
+          <img 
+            src="http://res.cloudinary.com/dytdhvf3s/image/upload/v1760508458/User_5e3ca275-4ec3-45c3-8f53-f173871d002e.jpg" 
+            alt="ChatWeb Logo" 
+          />
+        </div>
         <div className="login-header">
           <h2>Đăng Nhập</h2>
           <p>Chào mừng trở lại ChatWeb!</p>

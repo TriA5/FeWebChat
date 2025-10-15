@@ -34,37 +34,60 @@ const VideoCallInterface: React.FC<VideoCallInterfaceProps> = ({
 }) => {
   const localVideoRef = React.useRef<HTMLVideoElement>(null);
   const remoteVideoRef = React.useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = React.useRef<HTMLAudioElement>(null);
 
+  // ---------------- Local Video ----------------
   React.useEffect(() => {
-    console.log('🎥 VideoCallInterface - localStream changed:', localStream);
-    if (localVideoRef.current && localStream) {
-      console.log('🎥 Setting local video srcObject');
+    if (!localVideoRef.current) return;
+
+    if (localStream && isVideoEnabled) {
       localVideoRef.current.srcObject = localStream;
+    } else {
+      localVideoRef.current.srcObject = null;
     }
-  }, [localStream]);
+  }, [localStream, isVideoEnabled]);
 
+  // ---------------- Remote Video ----------------
   React.useEffect(() => {
-    console.log('🎥 VideoCallInterface - remoteStream changed:', remoteStream);
-    if (remoteVideoRef.current && remoteStream) {
-      console.log('🎥 Setting remote video srcObject');
+    if (!remoteVideoRef.current) return;
+
+    if (remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
+
+      // Gán lại mỗi khi track mới được thêm vào
+      remoteStream.onaddtrack = (e) => {
+        console.log('🎥 Remote track added:', e.track.kind);
+        remoteVideoRef.current!.srcObject = remoteStream;
+      };
     }
   }, [remoteStream]);
 
-  console.log('🎥 VideoCallInterface props:', {
-    isVisible,
-    localStream: !!localStream,
-    remoteStream: !!remoteStream,
-    friendName,
-    isVideoEnabled,
-    isAudioEnabled,
-    isMinimized
-  });
+  // ---------------- Remote Audio ----------------
+  React.useEffect(() => {
+    if (!remoteAudioRef.current) return;
+    const audioEl = remoteAudioRef.current;
 
-  if (!isVisible) {
-    console.log('🚫 VideoCallInterface not visible');
-    return null;
-  }
+    if (remoteStream) {
+      audioEl.srcObject = remoteStream;
+
+      const tryPlay = () => {
+        audioEl.play().catch(err => {
+          console.warn('⚠️ Cannot autoplay remote audio:', err);
+        });
+      };
+      tryPlay();
+
+      // Bắt lại sự kiện khi remote thêm track audio
+      remoteStream.onaddtrack = (e) => {
+        if (e.track.kind === 'audio') {
+          console.log('🎧 Remote audio added');
+          tryPlay();
+        }
+      };
+    }
+  }, [remoteStream]);
+
+  if (!isVisible) return null;
 
   if (isMinimized) {
     return (
@@ -74,16 +97,14 @@ const VideoCallInterface: React.FC<VideoCallInterfaceProps> = ({
             {friendAvatar ? (
               <img src={friendAvatar} alt={friendName} />
             ) : (
-              <div className="avatar-placeholder">{friendName.charAt(0).toUpperCase()}</div>
+              <div className="avatar-placeholder">
+                {friendName.charAt(0).toUpperCase()}
+              </div>
             )}
           </div>
           <div className="minimized-info">
             <span className="friend-name">{friendName}</span>
             <span className="call-duration">{callDuration}</span>
-          </div>
-          <div className="minimized-status">
-            {!isVideoEnabled && <span className="status-icon">📹</span>}
-            {!isAudioEnabled && <span className="status-icon">🔇</span>}
           </div>
         </div>
       </div>
@@ -99,13 +120,9 @@ const VideoCallInterface: React.FC<VideoCallInterfaceProps> = ({
             <span className="friend-name">{friendName}</span>
             <span className="call-duration">{callDuration}</span>
           </div>
-          <div className="header-actions">
-            {onMinimize && (
-              <button className="minimize-btn" onClick={onMinimize} title="Thu nhỏ">
-                <span>−</span>
-              </button>
-            )}
-          </div>
+          {onMinimize && (
+            <button className="minimize-btn" onClick={onMinimize}>−</button>
+          )}
         </div>
 
         {/* Video Area */}
@@ -113,24 +130,24 @@ const VideoCallInterface: React.FC<VideoCallInterfaceProps> = ({
           {/* Remote Video */}
           <div className="remote-video-container">
             {remoteStream ? (
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="remote-video"
-              />
+              <>
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className="remote-video"
+                />
+                <audio ref={remoteAudioRef} autoPlay playsInline />
+              </>
             ) : (
               <div className="video-placeholder">
-                <div className="placeholder-avatar">
-                  {friendAvatar ? (
-                    <img src={friendAvatar} alt={friendName} />
-                  ) : (
-                    <div className="avatar-placeholder">
-                      {friendName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </div>
+                {friendAvatar ? (
+                  <img src={friendAvatar} alt={friendName} />
+                ) : (
+                  <div className="avatar-placeholder">
+                    {friendName.charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <p>Đang kết nối...</p>
               </div>
             )}
@@ -161,9 +178,7 @@ const VideoCallInterface: React.FC<VideoCallInterfaceProps> = ({
             onClick={onToggleAudio}
             title={isAudioEnabled ? 'Tắt mic' : 'Bật mic'}
           >
-            <span className="control-icon">
-              {isAudioEnabled ? '🎤' : '🔇'}
-            </span>
+            {isAudioEnabled ? '🎤' : '🔇'}
           </button>
 
           <button
@@ -171,17 +186,15 @@ const VideoCallInterface: React.FC<VideoCallInterfaceProps> = ({
             onClick={onToggleVideo}
             title={isVideoEnabled ? 'Tắt camera' : 'Bật camera'}
           >
-            <span className="control-icon">
-              {isVideoEnabled ? '📹' : '📷'}
-            </span>
+            {isVideoEnabled ? '📹' : '📷'}
           </button>
 
           <button
             className="control-btn end-call-btn"
             onClick={onEndCall}
-            title="Kết thúc cuộc gọi"
+            title="Kết thúc"
           >
-            <span className="control-icon">📞</span>
+            📞
           </button>
         </div>
       </div>

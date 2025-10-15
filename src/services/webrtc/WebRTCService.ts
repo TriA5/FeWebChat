@@ -12,17 +12,79 @@ export class WebRTCService {
   private pendingOffer: RTCSessionDescriptionInit | null = null;
   private pendingIceCandidates: RTCIceCandidateInit[] = [];
 
-  // ICE servers configuration (you can use public STUN servers or set up your own TURN server)
-  private iceServers = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ]
-  };
+  // ICE servers configuration (STUN + TURN)
+private iceServers = {
+  iceServers: [
+    // Google STUN servers (dùng để lấy IP public)
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+
+    // TURN server (relay audio/video khi NAT hoặc khác mạng)
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp'
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
+  ]
+};
 
   constructor(userId: string) {
     this.userId = userId;
   }
+
+  private handleRemoteTrack = (event: RTCTrackEvent) => {
+    const track = event.track;
+    console.log('🎬 ontrack event received track:', {
+      kind: track.kind,
+      id: track.id,
+      readyState: track.readyState,
+      muted: track.muted,
+      streams: event.streams?.length
+    });
+
+    // Ensure we hold a MediaStream with incoming tracks (audio + video)
+    if (event.streams && event.streams[0]) {
+      this.remoteStream = event.streams[0];
+    } else {
+      if (!this.remoteStream) {
+        this.remoteStream = new MediaStream();
+      }
+      const exists = this.remoteStream.getTracks().some(t => t.id === track.id);
+      if (!exists) {
+        this.remoteStream.addTrack(track);
+      }
+    }
+
+    if (track.kind === 'video') {
+      const notifyVideoState = (enabled: boolean) => {
+        this.onRemoteVideoStatusChanged?.(enabled);
+      };
+
+      notifyVideoState(!track.muted && track.readyState !== 'ended');
+      track.onmute = () => notifyVideoState(false);
+      track.onunmute = () => notifyVideoState(true);
+      track.onended = () => notifyVideoState(false);
+    }
+
+    if (track.kind === 'audio') {
+      const notifyAudioState = (enabled: boolean) => {
+        this.onRemoteAudioStatusChanged?.(enabled);
+      };
+
+      notifyAudioState(!track.muted && track.readyState !== 'ended');
+      track.onmute = () => notifyAudioState(false);
+      track.onunmute = () => notifyAudioState(true);
+      track.onended = () => notifyAudioState(false);
+    }
+
+    if (this.remoteStream) {
+      this.onRemoteStreamReceived?.(this.remoteStream);
+    }
+  };
 
   async initializeConnection(callId: string, remoteUserId: string): Promise<void> {
     this.callId = callId;
@@ -43,11 +105,7 @@ export class WebRTCService {
       }
     };
 
-    this.peerConnection.ontrack = (event) => {
-      this.remoteStream = event.streams[0];
-      console.log('🎬 ontrack event received stream:', this.remoteStream, 'tracks:', this.remoteStream?.getTracks().map(t=>t.kind+':'+t.readyState));
-      this.onRemoteStreamReceived?.(this.remoteStream);
-    };
+    this.peerConnection.ontrack = this.handleRemoteTrack;
 
     this.peerConnection.onconnectionstatechange = () => {
       console.log('Connection state:', this.peerConnection?.connectionState);
@@ -231,10 +289,7 @@ export class WebRTCService {
             }
           }
         };
-        this.peerConnection.ontrack = (event) => {
-          this.remoteStream = event.streams[0];
-          this.onRemoteStreamReceived?.(this.remoteStream);
-        };
+        this.peerConnection.ontrack = this.handleRemoteTrack;
         this.peerConnection.onconnectionstatechange = () => {
           console.log('Connection state:', this.peerConnection?.connectionState);
           if (this.peerConnection?.connectionState === 'connected') {
@@ -382,7 +437,9 @@ export class WebRTCService {
 
   // Event handlers (to be set by the UI component)
   onLocalStreamReceived?: (stream: MediaStream) => void;
-  onRemoteStreamReceived?: (stream: MediaStream) => void;
+  onRemoteStreamReceived?: (stream: MediaStream | null) => void;
+  onRemoteVideoStatusChanged?: (enabled: boolean) => void;
+  onRemoteAudioStatusChanged?: (enabled: boolean) => void;
   onCallConnected?: () => void;
   onCallDisconnected?: () => void;
   onCallEnded?: () => void;
@@ -400,4 +457,73 @@ export class WebRTCService {
   isConnected(): boolean {
     return this.peerConnection?.connectionState === 'connected';
   }
+ private ensureLocalTracksAdded(): void {
+  if (!this.peerConnection) {
+    console.warn('⚠️ peerConnection chưa tạo — khởi tạo mới...');
+    this.peerConnection = new RTCPeerConnection(this.iceServers);
+
+    // Đăng ký lại event listeners quan trọng
+    this.peerConnection.onicecandidate = (event) => {
+      if (event.candidate && this.callId && this.remoteUserId) {
+        this.sendSignal({
+          callId: this.callId,
+          fromUserId: this.userId!,
+          toUserId: this.remoteUserId,
+          type: 'ICE_CANDIDATE',
+          data: event.candidate
+        });
+      }
+    };
+
+    this.peerConnection.ontrack = this.handleRemoteTrack;
+    this.peerConnection.onconnectionstatechange = () => {
+      console.log('Connection state:', this.peerConnection?.connectionState);
+      if (this.peerConnection?.connectionState === 'connected') {
+        this.onCallConnected?.();
+      } else if (this.peerConnection?.connectionState === 'disconnected') {
+        this.onCallDisconnected?.();
+      }
+    };
+  }
+
+  if (!this.localStream) {
+    console.warn('⚠️ Chưa có localStream để add track');
+    return;
+  }
+
+  const tracks = this.localStream.getTracks();
+  if (tracks.length === 0) {
+    console.warn('⚠️ localStream không có track nào để add');
+    return;
+  }
+
+  const senders = this.peerConnection.getSenders();
+
+  tracks.forEach(track => {
+    const existingSender = senders.find(s => s.track && s.track.kind === track.kind);
+
+    if (existingSender) {
+      // Nếu track cùng loại đã tồn tại (ví dụ video), thì chỉ thay track đó thôi
+      if (existingSender.track?.id !== track.id) {
+        console.log(`🔄 Thay thế track ${track.kind}`);
+        existingSender.replaceTrack(track).catch(err => {
+          console.warn(`replaceTrack(${track.kind}) lỗi:`, err);
+        });
+      }
+    } else {
+      // Nếu chưa có, thêm mới
+      console.log(`➕ Thêm track ${track.kind}`);
+      try {
+        if (this.peerConnection) {
+          this.peerConnection.addTrack(track, this.localStream!);
+        } else {
+          console.warn('❌ peerConnection is null, cannot add track');
+        }
+      } catch (err) {
+        console.error(`❌ addTrack(${track.kind}) lỗi:`, err);
+      }
+    }
+  });
+}
+
 }

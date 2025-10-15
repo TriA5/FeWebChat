@@ -15,7 +15,10 @@ import {
   unfriend
 } from '../../api/user/friendshipApi';
 import { getUserInfo } from '../../api/user/loginApi';
+import { Users, UserPlus, Search as SearchIcon } from 'lucide-react';
 import './Friendship.css';
+
+type TabKey = 'friends' | 'requests' | 'search';
 
 interface Friend {
   id: string;
@@ -43,9 +46,59 @@ const Friendship: React.FC = () => {
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [activeTab, setActiveTab] = useState<'friends' | 'requests' | 'search'>('friends');
+  const [activeTab, setActiveTab] = useState<TabKey>('friends');
   const [isLoading, setIsLoading] = useState(false);
   const [searchError, setSearchError] = useState<string>('');
+
+  const navigationItems: Array<{ key: TabKey; label: string; description: string; icon: React.ElementType; badge?: number }> = [
+    {
+      key: 'friends',
+      label: 'Trang chủ',
+      description: 'Tất cả bạn bè và cập nhật gần đây',
+      icon: Users,
+      badge: friends.length || undefined,
+    },
+    {
+      key: 'requests',
+      label: 'Lời mời kết bạn',
+      description: 'Xem và quản lý lời mời đang chờ',
+      icon: UserPlus,
+      badge: friendRequests.length || undefined,
+    },
+    {
+      key: 'search',
+      label: 'Tìm bạn bè',
+      description: 'Tra cứu bằng số điện thoại',
+      icon: SearchIcon,
+    },
+  ];
+
+  const sectionTitleMap: Record<TabKey, string> = {
+    friends: 'Tất cả bạn bè',
+    requests: 'Lời mời kết bạn',
+    search: 'Tìm kiếm bạn bè',
+  };
+
+  const sectionSubtitleMap: Record<TabKey, string> = {
+    friends: `${friends.length} người bạn đã kết nối`,
+    requests: friendRequests.length
+      ? `${friendRequests.length} lời mời đang chờ`
+      : 'Không có lời mời mới',
+    search: 'Nhập số điện thoại để tìm bạn mới',
+  };
+
+  const formatRequestTime = (timestamp: string) => {
+    if (!timestamp) return 'Mới đây';
+    try {
+      return new Date(timestamp).toLocaleDateString('vi-VN', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+    } catch (error) {
+      return 'Mới đây';
+    }
+  };
 
   useEffect(() => {
     const initializeData = async () => {
@@ -282,203 +335,244 @@ const Friendship: React.FC = () => {
   };
 
   return (
-    <div className="friendship-container">
-      <div className="friendship-header">
-        <h1>Bạn Bè</h1>
-        <p>Quản lý danh sách bạn bè và kết nối mới</p>
-      </div>
-
-      <div className="friendship-tabs">
-        <button 
-          className={activeTab === 'friends' ? 'tab active' : 'tab'}
-          onClick={() => setActiveTab('friends')}
-        >
-          Bạn Bè ({friends.length})
-        </button>
-        <button 
-          className={activeTab === 'requests' ? 'tab active' : 'tab'}
-          onClick={() => setActiveTab('requests')}
-        >
-          Lời Mời ({friendRequests.length})
-        </button>
-        <button 
-          className={activeTab === 'search' ? 'tab active' : 'tab'}
-          onClick={() => setActiveTab('search')}
-        >
-          Tìm Kiếm
-        </button>
-      </div>
-
-      <div className="friendship-content">
-        {activeTab === 'friends' && (
-          <div className="friends-list">
-            <h3>Danh Sách Bạn Bè</h3>
-            {friends.length === 0 ? (
-              <div className="empty-state">
-                <p>Bạn chưa có bạn bè nào</p>
-              </div>
-            ) : (
-              <div className="friends-grid">
-                {friends.map(friend => (
-                  <div key={friend.id} className="friend-card">
-                    <div className="friend-avatar">
-                      {friend.avatar ? (
-                        <img src={friend.avatar} alt={friend.username} />
-                      ) : (
-                        <div className="avatar-placeholder">
-                          {`${friend.firstName.charAt(0)}${friend.lastName.charAt(0)}`}
-                        </div>
-                      )}
-                      <div 
-                        className={`status-indicator status-${friend.status}`}
-                      ></div>
-                    </div>
-                    <div className="friend-info">
-                      <h4>{`${friend.firstName} ${friend.lastName}`}</h4>
-                      <p className="username">@{friend.username}</p>
-                      <p className="status">
-                        {getStatusText(friend.status)}
-                        {friend.lastSeen && ` - ${friend.lastSeen}`}
-                      </p>
-                    </div>
-                    <div className="friend-actions">
-                      <button className="btn-message" onClick={() => messageFriend(friend.id)}>Nhắn tin</button>
-                      <button 
-                        className="btn-remove"
-                        onClick={() => removeFriend(friend.id)}
-                      >
-                        Xóa bạn
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+    <div className="friends-page">
+      <div className="friends-page__container">
+        <aside className="friends-sidebar">
+          <div className="friends-sidebar__header">
+            <h1>Bạn bè</h1>
+            <p>Quản lý kết nối và khám phá bạn mới</p>
           </div>
-        )}
-
-        {activeTab === 'requests' && (
-          <div className="friend-requests">
-            <h3>Lời Mời Kết Bạn</h3>
-            {friendRequests.length === 0 ? (
-              <div className="empty-state">
-                <p>Không có lời mời kết bạn nào</p>
-              </div>
-            ) : (
-              <div className="requests-list">
-                {friendRequests.map(request => (
-                  <div key={request.id} className="request-card">
-                    <div className="request-avatar">
-                      {request.avatar ? (
-                        <img src={request.avatar} alt={request.username} />
-                      ) : (
-                        <div className="avatar-placeholder">
-                          {`${request.firstName.charAt(0)}${request.lastName.charAt(0)}`}
-                        </div>
-                      )}
-                    </div>
-                    <div className="request-info">
-                      <h4>{`${request.firstName} ${request.lastName}`}</h4>
-                      <p className="username">@{request.username}</p>
-                      <p className="request-date">Gửi lời mời {request.requestDate}</p>
-                    </div>
-                    <div className="request-actions">
-                      <button 
-                        className="btn-accept"
-                        onClick={() => acceptFriendRequest(request.id)}
-                      >
-                        Chấp nhận
-                      </button>
-                      <button 
-                        className="btn-reject"
-                        onClick={() => rejectFriendRequest(request.id)}
-                      >
-                        Từ chối
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+          <nav className="friends-sidebar__nav" aria-label="Danh mục bạn bè">
+            {navigationItems.map(item => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={`friends-sidebar__item${activeTab === item.key ? ' active' : ''}`}
+                  onClick={() => setActiveTab(item.key)}
+                >
+                  <span className="friends-sidebar__item-icon">
+                    <Icon size={20} strokeWidth={1.6} />
+                  </span>
+                  <span className="friends-sidebar__item-text">
+                    <span className="friends-sidebar__item-label">{item.label}</span>
+                    <span className="friends-sidebar__item-description">{item.description}</span>
+                  </span>
+                  {item.badge ? (
+                    <span className="friends-sidebar__item-badge">{item.badge}</span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </nav>
+          <div className="friends-sidebar__note">
+            <p>Giữ liên lạc với bạn bè và kiểm soát lời mời kết bạn ở một nơi.</p>
           </div>
-        )}
+        </aside>
 
-        {activeTab === 'search' && (
-          <div className="friend-search">
-            <h3>Tìm Kiếm Bạn Bè</h3>
-            <div className="search-box">
-              <input
-                type="text"
-                placeholder="Nhập số điện thoại để tìm kiếm (VD: 0787792236)"
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="search-input"
-              />
-              {/* <div className="search-icon">🔍</div> */}
+        <main className="friends-main">
+          <header className="friends-main__header">
+            <div>
+              <h2>{sectionTitleMap[activeTab]}</h2>
+              <p>{sectionSubtitleMap[activeTab]}</p>
             </div>
-
-            {searchError && (
-              <div className="search-error">
-                <p>{searchError}</p>
-              </div>
+            {activeTab === 'friends' && (
+              <button
+                type="button"
+                className="friends-button friends-button--surface"
+                onClick={() => setActiveTab('search')}
+              >
+                <SearchIcon size={16} strokeWidth={1.6} />
+                <span>Tìm bạn bè</span>
+              </button>
             )}
+          </header>
 
-            {isLoading && (
-              <div className="loading">
-                <p>Đang tìm kiếm...</p>
-              </div>
-            )}
-
-            {!isLoading && searchQuery && (
-              <div className="search-results">
-                <h4>Kết quả tìm kiếm ({searchResults.length})</h4>
-                {searchResults.length === 0 ? (
-                  <div className="empty-state">
-                    <p>Không tìm thấy kết quả phù hợp</p>
-                  </div>
-                ) : (
-                  <div className="results-list">
-                    {searchResults.map(user => (
-                      <div key={user.id} className="result-card">
-                        <div className="result-avatar">
-                          {user.avatar ? (
-                            <img src={user.avatar} alt={`${user.firstName} ${user.lastName}`} />
-                          ) : (
-                            <div className="avatar-placeholder">
-                              {`${user.firstName.charAt(0)}${user.lastName.charAt(0)}`}
-                            </div>
-                          )}
-                        </div>
-                        <div className="result-info">
-                          <h4>{`${user.firstName} ${user.lastName}`}</h4>
-                          <p className="username">{formatPhoneNumber(user.phoneNumber)}</p>
-                          <p className="user-details">{user.age} tuổi • {user.gender}</p>
-                        </div>
-                        <div className="result-actions">
-                          <button 
-                            className="btn-add-friend"
-                            onClick={() => sendFriendRequest(user.userId || user.id)}
-                            disabled={!user.userId}
-                            title={!user.userId ? 'Không thể kết bạn: Thiếu thông tin user ID' : 'Gửi lời mời kết bạn'}
-                          >
-                            {!user.userId ? 'Không có ID' : 'Kết bạn'}
-                          </button>
-                        </div>
+          {activeTab === 'friends' && (
+            <section className="friends-section" aria-label="Danh sách bạn bè">
+              {friends.length === 0 ? (
+                <div className="friends-empty">
+                  <p>Chưa có kết nối nào. Hãy tìm và thêm bạn bè mới.</p>
+                  <button
+                    type="button"
+                    className="friends-button friends-button--primary"
+                    onClick={() => setActiveTab('search')}
+                  >
+                    Tìm bạn bè mới
+                  </button>
+                </div>
+              ) : (
+                <div className="friends-grid">
+                  {friends.map(friend => (
+                    <article key={friend.id} className="friend-card">
+                      <div className="friend-card__avatar" aria-hidden="true">
+                        {friend.avatar ? (
+                          <img src={friend.avatar} alt={friend.username} />
+                        ) : (
+                          <span>
+                            {(friend.firstName?.charAt(0) || '').toUpperCase()}
+                            {(friend.lastName?.charAt(0) || '').toUpperCase()}
+                          </span>
+                        )}
+                        <span className={`status-dot status-dot--${friend.status}`} />
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                      <div className="friend-card__body">
+                        <h3>{`${friend.firstName} ${friend.lastName}`.trim()}</h3>
+                        <span className="friend-card__username">{friend.username}</span>
+                        <span className="friend-card__status">
+                          {getStatusText(friend.status)}
+                          {friend.lastSeen ? ` · ${friend.lastSeen}` : ''}
+                        </span>
+                      </div>
+                      <div className="friend-card__actions">
+                        <button
+                          type="button"
+                          className="friends-button friends-button--surface"
+                          onClick={() => messageFriend(friend.id)}
+                        >
+                          Nhắn tin
+                        </button>
+                        <button
+                          type="button"
+                          className="friends-button friends-button--danger"
+                          onClick={() => removeFriend(friend.id)}
+                        >
+                          Hủy kết bạn
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
-            {!searchQuery && !isLoading && !searchError && (
-              <div className="search-help">
-                <p>� Nhập số điện thoại để tìm kiếm bạn bè mới</p>
-                <p className="search-example">Ví dụ: 0787792236 hoặc +84787792236</p>
+          {activeTab === 'requests' && (
+            <section className="friends-section" aria-label="Lời mời kết bạn">
+              {friendRequests.length === 0 ? (
+                <div className="friends-empty">
+                  <p>Không có lời mời kết bạn nào ngay lúc này.</p>
+                </div>
+              ) : (
+                <div className="requests-grid">
+                  {friendRequests.map(request => (
+                    <article key={request.id} className="request-card">
+                      <div className="request-card__avatar" aria-hidden="true">
+                        {request.avatar ? (
+                          <img src={request.avatar} alt={request.username} />
+                        ) : (
+                          <span>
+                            {(request.firstName?.charAt(0) || '').toUpperCase()}
+                            {(request.lastName?.charAt(0) || '').toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="request-card__body">
+                        <h3>{`${request.firstName} ${request.lastName}`.trim()}</h3>
+                        <span className="request-card__username">{request.username}</span>
+                        <span className="request-card__date">Gửi {formatRequestTime(request.requestDate)}</span>
+                      </div>
+                      <div className="request-card__actions">
+                        <button
+                          type="button"
+                          className="friends-button friends-button--primary"
+                          onClick={() => acceptFriendRequest(request.id)}
+                        >
+                          Chấp nhận
+                        </button>
+                        <button
+                          type="button"
+                          className="friends-button friends-button--surface"
+                          onClick={() => rejectFriendRequest(request.id)}
+                        >
+                          Từ chối
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeTab === 'search' && (
+            <section className="friends-section friends-section--search" aria-label="Tìm kiếm bạn bè">
+              <div className="search-panel">
+                <div className="search-panel__field">
+                  <label htmlFor="friend-search" className="search-panel__label">Tìm kiếm bằng số điện thoại</label>
+                  <div className="search-panel__input">
+                    <SearchIcon size={18} strokeWidth={1.6} />
+                    <input
+                      id="friend-search"
+                      type="text"
+                      placeholder="Nhập số điện thoại (VD: 0787792236)"
+                      value={searchQuery}
+                      onChange={(e) => handleSearch(e.target.value)}
+                    />
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-        )}
+
+              {searchError && (
+                <div className="friends-alert friends-alert--error">{searchError}</div>
+              )}
+
+              {isLoading && <div className="friends-loading">Đang tìm kiếm...</div>}
+
+              {!isLoading && searchQuery && (
+                <div className="search-results">
+                  <h4>Kết quả tìm kiếm ({searchResults.length})</h4>
+                  {searchResults.length === 0 ? (
+                    <div className="friends-empty">
+                      <p>Không tìm thấy kết quả phù hợp.</p>
+                    </div>
+                  ) : (
+                    <div className="results-grid">
+                      {searchResults.map(user => (
+                        <article key={user.id} className="result-card">
+                          <div className="result-card__avatar" aria-hidden="true">
+                            {user.avatar ? (
+                              <img src={user.avatar} alt={`${user.firstName} ${user.lastName}`} />
+                            ) : (
+                              <span>
+                                {(user.firstName?.charAt(0) || '').toUpperCase()}
+                                {(user.lastName?.charAt(0) || '').toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                          <div className="result-card__body">
+                            <h3>{`${user.firstName} ${user.lastName}`.trim()}</h3>
+                            <span className="result-card__meta">{formatPhoneNumber(user.phoneNumber)}</span>
+                            <span className="result-card__details">{user.age} tuổi · {user.gender}</span>
+                          </div>
+                          <div className="result-card__actions">
+                            <button
+                              type="button"
+                              className="friends-button friends-button--primary"
+                              onClick={() => sendFriendRequest(user.userId || user.id)}
+                              disabled={!user.userId}
+                              title={!user.userId ? 'Không thể kết bạn: Thiếu thông tin user ID' : 'Gửi lời mời kết bạn'}
+                            >
+                              {!user.userId ? 'Không có ID' : 'Kết bạn'}
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!searchQuery && !isLoading && !searchError && (
+                <div className="friends-hint">
+                  <p>Nhập số điện thoại để tìm kiếm bạn bè mới và gửi lời mời kết bạn.</p>
+                  <span>Ví dụ: 0787792236 hoặc +84787792236</span>
+                </div>
+              )}
+            </section>
+          )}
+        </main>
       </div>
     </div>
   );

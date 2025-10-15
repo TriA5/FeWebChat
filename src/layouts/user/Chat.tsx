@@ -21,6 +21,13 @@ import { WebRTCService } from '../../services/webrtc/WebRTCService';
 import IncomingCallModal from '../../components/videocall/IncomingCallModal';
 import VideoCallInterface from '../../components/videocall/VideoCallInterface';
 import { getUserById } from '../../api/user/userApi';
+import { 
+  initiateGroupCall, 
+  joinGroupCall, 
+  GroupVideoCallDTO
+} from '../../api/videocall/groupVideoCallApi';
+import GroupVideoCallInterface from '../../components/videocall/GroupVideoCallInterface';
+import { getClient } from '../../api/websocket/stompClient';
 import './Chat.css';
 
 interface Message {
@@ -93,7 +100,7 @@ const Chat: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingGroup, setDeletingGroup] = useState(false);
   
-  // Video call states
+  // Video call states (1-1)
   const [incomingCall, setIncomingCall] = useState<VideoCallDTO | null>(null);
   const [activeCall, setActiveCall] = useState<VideoCallDTO | null>(null);
   const [isVideoCallVisible, setIsVideoCallVisible] = useState(false);
@@ -102,8 +109,20 @@ const Chat: React.FC = () => {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isRemoteVideoEnabled, setIsRemoteVideoEnabled] = useState(true);
   const [callDuration, setCallDuration] = useState('00:00');
   const [webRTCService, setWebRTCService] = useState<WebRTCService | null>(null);
+  
+  // Group video call states
+  const [activeGroupCall, setActiveGroupCall] = useState<GroupVideoCallDTO | null>(null);
+  const [isGroupCallVisible, setIsGroupCallVisible] = useState(false);
+  const [showGroupCallNotification, setShowGroupCallNotification] = useState(false);
+  const [groupCallNotificationData, setGroupCallNotificationData] = useState<GroupVideoCallDTO | null>(null);
+  
+  // Fake camera mode for testing on single device
+  const [useFakeCamera, setUseFakeCamera] = useState(() => {
+    return localStorage.getItem('useFakeCamera') === 'true';
+  });
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
@@ -142,6 +161,7 @@ const Chat: React.FC = () => {
     setRemoteStream(null);
     setIsVideoEnabled(true);
     setIsAudioEnabled(true);
+  setIsRemoteVideoEnabled(true);
     setCallDuration('00:00');
     callStartTimeRef.current = null;
   }, []);
@@ -530,6 +550,46 @@ const Chat: React.FC = () => {
     inputRef.current?.focus();
   };
 
+  // GROUP VIDEO CALL NOTIFICATION HANDLER
+  // ==================================================
+  const handleGroupCallNotification = useCallback((signal: any) => {
+    console.log('📹 ============================================');
+    console.log('📹 Processing group call signal:', signal);
+    console.log('📹 Signal type:', signal.type);
+    console.log('📹 Signal data:', signal.data);
+    console.log('📹 Current user ID:', currentUser?.id);
+    
+    if (signal.type === 'CALL_INITIATED' && signal.data) {
+      const callData: GroupVideoCallDTO = signal.data;
+      console.log('📹 Call initiated by:', callData.initiatorId);
+      console.log('📹 Call ID:', callData.id);
+      console.log('📹 Group ID:', callData.groupId);
+      console.log('📹 Group Name:', callData.groupName);
+      console.log('📹 Participants:', callData.participants);
+      
+      // Only show notification if user is not the initiator
+      if (callData.initiatorId !== currentUser?.id) {
+        console.log('✅ Showing notification to user');
+        setGroupCallNotificationData(callData);
+        setShowGroupCallNotification(true);
+      } else {
+        console.log('⏭️ Skipping notification - user is initiator');
+      }
+    } else if (signal.type === 'CALL_ENDED') {
+      console.log('🛑 Call ended notification');
+      setShowGroupCallNotification(false);
+      setGroupCallNotificationData(null);
+      // Cleanup if in active call
+      if (activeGroupCall) {
+        setActiveGroupCall(null);
+        setIsGroupCallVisible(false);
+      }
+    } else {
+      console.log('⚠️ Unknown signal type or missing data');
+    }
+    console.log('📹 ============================================');
+  }, [currentUser?.id, activeGroupCall]);
+
   // websocket subscriptions
   useEffect(() => {
     const me = getUserInfo();
@@ -590,7 +650,7 @@ const Chat: React.FC = () => {
         });
 
         // Subscribe to video call signaling
-        subVideoSignal = wsSubscribe(`/topic/video-call/signal/${me.id}`, (msg) => {
+        subVideoSignal = wsSubscribe(`/topic/video-signal/${me.id}`, (msg) => {
           const signal = JSON.parse(msg.body);
           if (webRTCService) {
             webRTCService.handleSignal(signal);
@@ -748,7 +808,62 @@ const Chat: React.FC = () => {
       try { subVideoSignal && subVideoSignal.unsubscribe && subVideoSignal.unsubscribe(); } catch {}
       try { subGroupMemberRemoved && subGroupMemberRemoved.unsubscribe && subGroupMemberRemoved.unsubscribe(); } catch {}
     };
-  }, [selectedChatRoom, friendMap, activeCall, incomingCall, webRTCService, cleanupCall, currentUser, userCache]);
+  }, [selectedChatRoom, friendMap, activeCall, incomingCall, webRTCService, cleanupCall, currentUser, userCache, handleGroupCallNotification]);
+
+  // Separate effect for group video call subscriptions
+  useEffect(() => {
+    const me = getUserInfo();
+    if (!me?.id) return;
+    if (chatRooms.length === 0) return;
+
+    console.log('🎯 Setting up group video call subscriptions for', chatRooms.length, 'rooms');
+
+    const subscriptions: any[] = [];
+    let setupTimer: NodeJS.Timeout;
+
+    // Delay subscription to ensure WebSocket is ready
+    setupTimer = setTimeout(() => {
+      // Subscribe to ALL groups video call notifications
+      chatRooms.forEach(room => {
+        if (room.type === 'group') {
+          try {
+            console.log('📹 Subscribing to group video call for group:', room.id, room.name);
+            const sub = wsSubscribe(`/topic/group-video-call/${room.id}`, (msg) => {
+              console.log('📹 RAW MESSAGE RECEIVED for group:', room.id, msg.body);
+              try {
+                const signal: any = JSON.parse(msg.body);
+                console.log('📹 PARSED group call signal:', signal);
+                handleGroupCallNotification(signal);
+              } catch (parseError) {
+                console.error('❌ Failed to parse group call signal:', parseError);
+              }
+            });
+            if (sub) {
+              subscriptions.push(sub);
+              console.log('✅ Successfully subscribed to group:', room.name);
+            } else {
+              console.warn('⚠️ Subscription returned null for group:', room.name);
+            }
+          } catch (err) {
+            console.error('❌ Failed to subscribe to group video call:', room.id, err);
+          }
+        }
+      });
+    }, 1000); // Wait 1 second for WebSocket to be ready
+
+    // Cleanup subscriptions when chatRooms change
+    return () => {
+      clearTimeout(setupTimer);
+      console.log('🧹 Cleaning up', subscriptions.length, 'group video call subscriptions');
+      subscriptions.forEach(sub => {
+        try {
+          sub && sub.unsubscribe && sub.unsubscribe();
+        } catch (e) {
+          console.warn('Failed to unsubscribe:', e);
+        }
+      });
+    };
+  }, [chatRooms, handleGroupCallNotification]);
 
   // Create group handler
   const handleCreateGroup = async (e: React.FormEvent) => {
@@ -884,16 +999,28 @@ const Chat: React.FC = () => {
       await webRTCService.initializeConnection(call.id, otherUserId);
       
       // Setup WebRTC event handlers
-      webRTCService.onLocalStreamReceived = (stream: MediaStream) => {
+      webRTCService.onLocalStreamReceived = (stream: MediaStream | null) => {
         console.log('📹 Local stream received (caller):', stream);
         setLocalStream(stream);
       };
       
-      webRTCService.onRemoteStreamReceived = (stream: MediaStream) => {
+      webRTCService.onRemoteStreamReceived = (stream: MediaStream | null) => {
         console.log('📹 Remote stream received (caller):', stream);
         setRemoteStream(stream);
+        if (!stream) {
+          setIsRemoteVideoEnabled(true);
+        }
       };
       
+      webRTCService.onRemoteVideoStatusChanged = (enabled: boolean) => {
+        console.log('🎛️ Remote video status (caller):', enabled);
+        setIsRemoteVideoEnabled(enabled);
+      };
+
+      webRTCService.onRemoteAudioStatusChanged = (enabled: boolean) => {
+        console.log('🎚️ Remote audio status (caller):', enabled);
+      };
+
       webRTCService.onCallEnded = () => {
         cleanupCall();
       };
@@ -902,6 +1029,7 @@ const Chat: React.FC = () => {
       console.log('🔄 Starting WebRTC call...');
       await webRTCService.startCall();
       console.log('✅ WebRTC call started successfully');
+      setIsRemoteVideoEnabled(true);
     } catch (error) {
       console.error('❌ Failed to initiate call:', error);
       
@@ -947,15 +1075,27 @@ const Chat: React.FC = () => {
       await webRTCService.initializeConnection(call.id, otherUserId);
       
       // Setup WebRTC event handlers BEFORE answerCall
-      webRTCService.onLocalStreamReceived = (stream: MediaStream) => {
+      webRTCService.onLocalStreamReceived = (stream: MediaStream | null) => {
         console.log('📹 Local stream received (callee):', stream);
-        console.log('📹 Stream tracks:', stream.getTracks());
+        console.log('📹 Stream tracks:', stream ? stream.getTracks() : []);
         setLocalStream(stream);
       };
       
-      webRTCService.onRemoteStreamReceived = (stream: MediaStream) => {
+      webRTCService.onRemoteStreamReceived = (stream: MediaStream | null) => {
         console.log('📹 Remote stream received (callee):', stream);
         setRemoteStream(stream);
+        if (!stream) {
+          setIsRemoteVideoEnabled(true);
+        }
+      };
+
+      webRTCService.onRemoteVideoStatusChanged = (enabled: boolean) => {
+        console.log('🎛️ Remote video status (callee):', enabled);
+        setIsRemoteVideoEnabled(enabled);
+      };
+
+      webRTCService.onRemoteAudioStatusChanged = (enabled: boolean) => {
+        console.log('🎚️ Remote audio status (callee):', enabled);
       };
       
       webRTCService.onCallEnded = () => {
@@ -966,6 +1106,7 @@ const Chat: React.FC = () => {
       console.log('📞 Calling answerCall()...');
       await webRTCService.answerCall();
       console.log('✅ answerCall() completed');
+  setIsRemoteVideoEnabled(true);
       
       // Send accept signal
       wsSend('/app/video-call/accept', { callId: call.id });
@@ -996,6 +1137,88 @@ const Chat: React.FC = () => {
     setIsVideoCallMinimized(!isVideoCallMinimized);
   };
 
+  // ==================================================
+  // GROUP VIDEO CALL HANDLERS
+  // ==================================================
+
+  const handleStartGroupCall = useCallback(async () => {
+    if (!selectedChatRoom || selectedChatRoom.type !== 'group') {
+      alert('Vui lòng chọn một nhóm để gọi video');
+      return;
+    }
+
+    if (!currentUser?.id) {
+      alert('Không tìm thấy thông tin người dùng');
+      return;
+    }
+
+    // Check if already in a call
+    if (isGroupCallVisible || activeGroupCall) {
+      alert('⚠️ Bạn đang trong cuộc gọi khác. Vui lòng kết thúc cuộc gọi hiện tại trước.');
+      return;
+    }
+    
+    if (isVideoCallVisible || activeCall) {
+      alert('⚠️ Bạn đang trong cuộc gọi 1-1. Vui lòng kết thúc cuộc gọi hiện tại trước.');
+      return;
+    }
+
+    try {
+      const callData = await initiateGroupCall(selectedChatRoom.id, currentUser.id);
+      setActiveGroupCall(callData);
+      setIsGroupCallVisible(true);
+    } catch (error) {
+      console.error('Error starting group call:', error);
+      alert('Không thể bắt đầu cuộc gọi nhóm');
+    }
+  }, [selectedChatRoom, currentUser, isGroupCallVisible, activeGroupCall, isVideoCallVisible, activeCall]);
+
+  const handleJoinGroupCall = useCallback(async () => {
+    if (!groupCallNotificationData) return;
+    
+    // Check if already in a call
+    if (isGroupCallVisible || activeGroupCall) {
+      alert('⚠️ Bạn đang trong cuộc gọi khác. Vui lòng kết thúc cuộc gọi hiện tại trước.');
+      return;
+    }
+    
+    if (isVideoCallVisible || activeCall) {
+      alert('⚠️ Bạn đang trong cuộc gọi 1-1. Vui lòng kết thúc cuộc gọi hiện tại trước.');
+      return;
+    }
+    
+    if (!currentUser?.id) {
+      alert('Không tìm thấy thông tin người dùng');
+      return;
+    }
+
+    try {
+      const callData = await joinGroupCall(
+        groupCallNotificationData.id,
+        currentUser.id
+      );
+      
+      setActiveGroupCall(callData);
+      setIsGroupCallVisible(true);
+      setShowGroupCallNotification(false);
+    } catch (error: any) {
+      console.error('Error joining group call:', error);
+      alert('Không thể tham gia cuộc gọi: ' + (error.response?.data?.message || error.message));
+    }
+  }, [groupCallNotificationData, currentUser, isGroupCallVisible, activeGroupCall, isVideoCallVisible, activeCall]);
+
+  const handleDeclineGroupCall = () => {
+    setShowGroupCallNotification(false);
+    setGroupCallNotificationData(null);
+  };
+
+  const handleEndGroupCall = () => {
+    setIsGroupCallVisible(false);
+    setActiveGroupCall(null);
+    setShowGroupCallNotification(false);
+    setGroupCallNotificationData(null);
+  };
+
   // Call duration timer
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -1018,15 +1241,6 @@ const Chat: React.FC = () => {
   const filteredChatRooms = chatRooms.filter(room =>
     room.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  // Ensure single websocket low-level connect (only once)
-  useEffect(() => {
-    let connected = false;
-    if (!connected) {
-      wsConnect();
-      connected = true;
-    }
-  }, []);
 
   if (!currentUser) {
     return (
@@ -1051,6 +1265,20 @@ const Chat: React.FC = () => {
               title="Tạo nhóm mới"
               onClick={() => { setShowGroupModal(true); setModalTab('create'); }}
             >➕ Nhóm</button>
+            {/* <button 
+              className={`action-btn ${useFakeCamera ? 'active' : ''}`}
+              title={useFakeCamera ? "Đang dùng camera giả (test)\nClick để dùng camera thật" : "Đang dùng camera thật\nClick để dùng camera giả (test trên 1 máy)"}
+              onClick={() => {
+                const newValue = !useFakeCamera;
+                setUseFakeCamera(newValue);
+                localStorage.setItem('useFakeCamera', newValue.toString());
+                alert(newValue 
+                  ? '🎭 Đã BẬT camera giả!\nBây giờ bạn có thể mở nhiều tab để test group call trên cùng 1 máy.\nMỗi tab sẽ có màu khác nhau.' 
+                  : '📹 Đã TẮT camera giả!\nSẽ dùng camera thật.');
+              }}
+            >
+              {useFakeCamera ? '🎭' : '📹'}
+            </button> */}
             <button 
               className="sidebar-toggle"
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -1136,16 +1364,26 @@ const Chat: React.FC = () => {
               
               <div className="chat-actions">
                 <button className="action-btn">📞</button>
-                <button 
-                  className="action-btn" 
-                  onClick={handleInitiateCall}
-                  disabled={!!activeCall}
-                  title="Gọi video"
-                >
-                  📹
-                </button>
+                {selectedChatRoom.type === 'private' && (
+                  <button 
+                    className="action-btn" 
+                    onClick={handleInitiateCall}
+                    disabled={!!activeCall}
+                    title="Gọi video 1-1"
+                  >
+                    📹
+                  </button>
+                )}
                 {selectedChatRoom.type === 'group' && (
                   <>
+                    <button 
+                      className="action-btn" 
+                      onClick={handleStartGroupCall}
+                      disabled={!!activeGroupCall || !!activeCall}
+                      title="Gọi video nhóm"
+                    >
+                      📹 Gọi nhóm
+                    </button>
                     <button 
                       className="action-btn" 
                       title="Quản lý thành viên" 
@@ -1261,7 +1499,7 @@ const Chat: React.FC = () => {
                   onClick={() => fileInputRef.current?.click()}
                   title="Gửi ảnh"
                 >
-                  �️
+                   ️
                 </button>
                                 <button 
                   type="button" 
@@ -1324,6 +1562,44 @@ const Chat: React.FC = () => {
           onEndCall={handleEndCall}
           onMinimize={handleMinimizeCall}
           isMinimized={isVideoCallMinimized}
+        />
+      )}
+
+      {/* Group Video Call Notification */}
+      {showGroupCallNotification && groupCallNotificationData && (
+        <div className="group-call-notification">
+          <div className="notification-content">
+            <h3>📞 Cuộc gọi video nhóm</h3>
+            <p>
+              <strong>{groupCallNotificationData.initiatorName}</strong> đang gọi trong nhóm{' '}
+              <strong>{groupCallNotificationData.groupName}</strong>
+            </p>
+            <p className="participant-info">
+              👥 {groupCallNotificationData.participants?.length || 0} người đang trong cuộc gọi
+            </p>
+            <div className="notification-actions">
+              <button className="btn-join" onClick={handleJoinGroupCall}>
+                ✅ Tham gia
+              </button>
+              <button className="btn-decline" onClick={handleDeclineGroupCall}>
+                ❌ Từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Group Video Call Interface */}
+      {activeGroupCall && isGroupCallVisible && (
+        <GroupVideoCallInterface
+          callId={activeGroupCall.id}
+          groupId={activeGroupCall.groupId}
+          groupName={activeGroupCall.groupName}
+          initiatorId={activeGroupCall.initiatorId}
+          currentUserId={currentUser?.id || ''}
+          participants={activeGroupCall.participants}
+          onCallEnded={handleEndGroupCall}
+          stompClient={getClient()}
         />
       )}
 

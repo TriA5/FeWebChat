@@ -86,6 +86,12 @@ const RegisterPage: React.FC = () => {
   return (
     <div className="chat-register-container">
       <div className="chat-box">
+        <div className="register-logo">
+          <img 
+            src="http://res.cloudinary.com/dytdhvf3s/image/upload/v1760508458/User_5e3ca275-4ec3-45c3-8f53-f173871d002e.jpg" 
+            alt="ChatWeb Logo" 
+          />
+        </div>
         <div className="chat-message">{message}</div>
         {errors.length > 0 && (
           <div className="error-messages">
