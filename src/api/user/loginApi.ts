@@ -1,7 +1,8 @@
 // Login API
+import { API_BASE_URL } from '../API_BASE_URL';
 import { saveToken, removeToken, isTokenValid } from '../util/JwtService';
 
-const API_BASE_URL = 'http://localhost:8080';
+
 
 export interface LoginRequest {
   username: string;

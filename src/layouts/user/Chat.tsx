@@ -129,6 +129,7 @@ const Chat: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null); // For images
   const docFileInputRef = useRef<HTMLInputElement>(null); // For documents
+  const videoFileInputRef = useRef<HTMLInputElement>(null); // For videos
   const callStartTimeRef = useRef<Date | null>(null);
 
   const scrollToBottom = () => {
@@ -521,6 +522,64 @@ const Chat: React.FC = () => {
     }
   };
 
+  // Video upload handler
+  const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedChatRoom || !currentUser) return;
+
+    console.log('📹 Video selected:', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      sizeMB: (file.size / (1024 * 1024)).toFixed(2) + ' MB'
+    });
+
+    // Validate file type
+    if (!file.type.startsWith('video/')) {
+      alert('Vui lòng chọn file video!');
+      return;
+    }
+
+    // Validate file size (max 50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      alert(`Kích thước video không được vượt quá 50MB!\nKích thước hiện tại: ${(file.size / (1024 * 1024)).toFixed(2)} MB`);
+      return;
+    }
+
+    // Check for empty file
+    if (file.size === 0) {
+      alert('File video trống! Vui lòng chọn file khác.');
+      return;
+    }
+
+    try {
+      console.log('📤 Uploading video...');
+      const { sendFileMessage, sendGroupFileMessage } = await import('../../api/chat/chatApi');
+      if (selectedChatRoom.type === 'group') {
+        await sendGroupFileMessage(selectedChatRoom.id, currentUser.id, file);
+      } else {
+        await sendFileMessage(selectedChatRoom.id, currentUser.id, file);
+      }
+      console.log('✅ Video uploaded successfully');
+      // Message will be received via WebSocket
+    } catch (error: any) {
+      console.error('❌ Send video failed:', error);
+      const errorMsg = error.response?.data?.message || error.message || 'Không thể gửi video';
+      alert(`Lỗi tải video:\n${errorMsg}\n\nGợi ý:\n- Kiểm tra kích thước file (tối đa 50MB)\n- Kiểm tra định dạng video (MP4, WebM, ...)\n- Thử file video khác`);
+    }
+
+    // Reset file input
+    if (videoFileInputRef.current) {
+      videoFileInputRef.current.value = '';
+    }
+  };
+
+  // Helper: check if a file name or url is a video
+  const isVideoFile = (fileName?: string, fileUrl?: string) => {
+    const str = (fileName || fileUrl || '').toLowerCase();
+    return ['.mp4', '.webm', '.ogg', '.ogv', '.mov', '.mkv', '.m4v'].some(ext => str.endsWith(ext));
+  };
+
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedChatRoom || !currentUser) return;
@@ -687,7 +746,13 @@ const Chat: React.FC = () => {
               isOwn: data.senderId === myId,
             };
             setMessages(prev => [...prev, incoming]);
-            const lastMsgText = incoming.type === 'image' ? '📷 Hình ảnh' : incoming.type === 'file' ? '📎 File đính kèm' : incoming.content;
+            const lastMsgText = incoming.type === 'image'
+              ? '📷 Hình ảnh'
+              : incoming.type === 'file' && isVideoFile(incoming.fileName, incoming.fileUrl)
+                ? '🎬 Video'
+                : incoming.type === 'file'
+                  ? '📎 File đính kèm'
+                  : incoming.content;
             setChatRooms(prev => prev.map(r => r.id === selectedChatRoom.id ? { ...r, lastMessage: lastMsgText, lastMessageTime: incoming.timestamp } : r));
           });
         } else {
@@ -719,7 +784,13 @@ const Chat: React.FC = () => {
                 isOwn: data.senderId === myId,
               };
               setMessages(prev => [...prev, incoming]);
-              const lastMsgText = incoming.type === 'image' ? '📷 Hình ảnh' : incoming.type === 'file' ? '📎 File đính kèm' : incoming.content;
+              const lastMsgText = incoming.type === 'image'
+                ? '📷 Hình ảnh'
+                : incoming.type === 'file' && isVideoFile(incoming.fileName, incoming.fileUrl)
+                  ? '🎬 Video'
+                  : incoming.type === 'file'
+                    ? '📎 File đính kèm'
+                    : incoming.content;
               setChatRooms(prev => prev.map(r => r.id === selectedChatRoom.id ? { ...r, lastMessage: lastMsgText, lastMessageTime: incoming.timestamp, participants: r.participants.includes(incoming.senderId) ? r.participants : [...r.participants, incoming.senderId] } : r));
               setSelectedChatRoom(prev => prev && prev.id === selectedChatRoom.id ? { ...prev, participants: prev.participants.includes(incoming.senderId) ? prev.participants : [...prev.participants, incoming.senderId] } : prev);
             });
@@ -1440,6 +1511,13 @@ const Chat: React.FC = () => {
                           className="message-image"
                           onClick={() => window.open(message.imageUrl, '_blank')}
                         />
+                      ) : message.type === 'file' && message.fileUrl && isVideoFile(message.fileName, message.fileUrl) ? (
+                        <video
+                          className="message-video"
+                          src={message.fileUrl}
+                          controls
+                          preload="metadata"
+                        />
                       ) : message.type === 'file' && message.fileUrl ? (
                         <div className="file-attachment">
                           <div className="file-icon">
@@ -1493,6 +1571,14 @@ const Chat: React.FC = () => {
                   onChange={handleFileSelect}
                   aria-label="Upload file"
                 />
+                <input
+                  type="file"
+                  ref={videoFileInputRef}
+                  accept="video/*"
+                  className="hidden-file-input"
+                  onChange={handleVideoSelect}
+                  aria-label="Upload video"
+                />
                 <button 
                   type="button" 
                   className="attachment-btn image-btn" 
@@ -1500,6 +1586,14 @@ const Chat: React.FC = () => {
                   title="Gửi ảnh"
                 >
                    ️
+                </button>
+                <button 
+                  type="button" 
+                  className="attachment-btn video-btn" 
+                  onClick={() => videoFileInputRef.current?.click()}
+                  title="Gửi video"
+                >
+                  🎬
                 </button>
                                 <button 
                   type="button" 

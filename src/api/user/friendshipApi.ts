@@ -1,8 +1,9 @@
 // Friendship Search API
 import { getUserInfo } from './loginApi';
 import { getToken } from '../util/JwtService';
+import { API_BASE_URL } from '../API_BASE_URL';
 
-const API_BASE_URL = 'http://localhost:8080';
+
 
 export interface SearchUserResponse {
   idUser: string; // UUID của user (API trả về "idUser" thay vì "id")

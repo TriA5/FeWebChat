@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { API_BASE_URL } from '../API_BASE_URL';
 
-const API_BASE_URL = 'http://localhost:8080';
+// const API_BASE_URL = 'https://unpessimistically-unbewailed-christy.ngrok-free.dev';
 
 export interface ParticipantInfo {
   userId: string;

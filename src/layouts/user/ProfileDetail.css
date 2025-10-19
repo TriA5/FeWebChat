@@ -793,6 +793,7 @@ body {
 .fb-profile__posts {
   display: grid;
   gap: 1.5rem;
+  text-align: left;
 }
 
 .fb-post-card__header {

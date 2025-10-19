@@ -339,7 +339,7 @@ const ProfileDetail: React.FC = () => {
         audience: "Công khai",
         time: "2 giờ trước",
         content: "Một buổi chiều tuyệt đẹp cùng team chạy bộ ở công viên! Ai muốn tham gia cùng tụi mình không? 🏃‍♂️",
-        image: "https://images.unsplash.com/photo-1520962917967-32fa1234121d?auto=format&fit=crop&w=1200&q=80",
+        image: "https://res.cloudinary.com/dytdhvf3s/image/upload/v1758505271/User_229d6dd1-ee5c-444a-9068-5de3846e1372.jpg",
         reactions: 134,
         comments: 42,
         shares: 9,
@@ -725,7 +725,7 @@ const ProfileDetail: React.FC = () => {
                     alt={fullName}
                   />
                   <div>
-                    <strong>{fullName}</strong>
+                    <strong style={{ marginRight: "20px" }}>{fullName}</strong>
                     <div className="fb-post-card__meta">
                       <span>{post.time}</span>
                       <span>·</span>

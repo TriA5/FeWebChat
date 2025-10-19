@@ -1,6 +1,7 @@
+import { API_BASE_URL } from '../API_BASE_URL';
 import { getToken } from '../util/JwtService';
 
-const API_BASE_URL = 'http://localhost:8080';
+
 
 export interface ChatMessageDTO {
   id: string;

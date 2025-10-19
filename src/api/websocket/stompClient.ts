@@ -1,5 +1,6 @@
 import SockJS from 'sockjs-client';
 import { Client, IMessage } from '@stomp/stompjs';
+import { API_BASE_URL } from '../API_BASE_URL';
 
 let client: Client | null = null;
 const pendingSends: Array<{ destination: string; body: any }> = [];
@@ -13,7 +14,7 @@ function createClient() {
   
   client = new Client({
     brokerURL: undefined, // We'll use webSocketFactory instead
-    webSocketFactory: () => new SockJS('http://localhost:8080/ws') as any,
+    webSocketFactory: () => new SockJS(`${API_BASE_URL}/ws`) as any,
     reconnectDelay: 5000,
     heartbeatIncoming: 4000,
     heartbeatOutgoing: 4000,

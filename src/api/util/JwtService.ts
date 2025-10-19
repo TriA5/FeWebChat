@@ -1,4 +1,4 @@
-// JWT Service - Quản lý JWT token và decoding
+import { API_BASE_URL } from '../API_BASE_URL';
 export interface JwtPayload {
   id: string;
   sub: string; // username

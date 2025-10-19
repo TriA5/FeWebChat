@@ -1,4 +1,4 @@
-// Types cho API đăng ký
+import { API_BASE_URL } from '../API_BASE_URL';
 export interface RegisterRequest {
   username: string;
   password: string;
@@ -24,7 +24,7 @@ export const registerUser = async (userData: RegisterRequest): Promise<RegisterR
   try {
     console.log('Sending registration data:', userData);
 
-    const response = await fetch('http://localhost:8080/user/register', {
+    const response = await fetch(`${API_BASE_URL}/user/register`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(userData),
