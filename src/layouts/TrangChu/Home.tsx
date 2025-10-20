@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import './Home.css';
+import { getVisiblePosters, deletePoster } from '../../api/poster/posterApi';
+import { getUserInfo } from '../../api/user/loginApi';
+import { connect, subscribe } from '../../api/websocket/stompClient';
+import type { StompSubscription } from '@stomp/stompjs';
+import ImageViewer from '../../components/ImageViewer';
 
 interface Story {
 	id: number;
@@ -11,13 +16,15 @@ interface Story {
 }
 
 interface Post {
-	id: number;
+	id: string; // UUID từ backend
+	authorId: string; // UUID của user
 	authorName: string;
 	authorAvatar: string;
 	time: string;
-	audience: 'public' | 'friends';
+	audience: 'public' | 'friends' | 'private';
 	content: string;
 	image?: string;
+	images?: string[]; // Thêm để support nhiều ảnh
 	reactions: number;
 	comments: number;
 	shares: number;
@@ -53,44 +60,6 @@ const stories: Story[] = [
 	},
 ];
 
-const posts: Post[] = [
-	{
-		id: 1,
-		authorName: 'Tuyển dụng Thực tập sinh IT',
-		authorAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80',
-		time: '36 phút trước',
-		audience: 'public',
-		content: 'Giờ job backend về NodeJS hay Java nhiều hơn và cái nào lương cao hơn thế mọi người?',
-		image: 'https://images.unsplash.com/photo-1523475472560-d2df97ec485c?auto=format&fit=crop&w=1200&q=80',
-		reactions: 120,
-		comments: 48,
-		shares: 7,
-	},
-	{
-		id: 2,
-		authorName: 'Wind Watch',
-		authorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
-		time: '1 giờ trước',
-		audience: 'friends',
-		content: 'Vừa về thêm rất nhiều mẫu đồng hồ giới hạn, anh em inbox ngay để giữ slot nhé! ⌚️',
-		image: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?auto=format&fit=crop&w=1200&q=80',
-		reactions: 86,
-		comments: 23,
-		shares: 5,
-	},
-	{
-		id: 3,
-		authorName: 'Đồng Quốc An',
-		authorAvatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=120&q=80',
-		time: 'Hôm qua',
-		audience: 'friends',
-		content: 'Có ai muốn join team chạy bộ cuối tuần ở công viên Gia Định không? Tụi mình tập 6h sáng thứ 7 nè.',
-		reactions: 64,
-		comments: 12,
-		shares: 2,
-	},
-];
-
 const shortcuts = [
 	{ id: 1, label: 'Bạn bè', icon: '👥' },
 	{ id: 2, label: 'Kỷ niệm', icon: '🗓️' },
@@ -110,8 +79,201 @@ const contacts = [
 
 const Home: React.FC = () => {
 	const storiesRef = useRef<HTMLDivElement>(null);
+	const navigate = useNavigate();
 	const [canScrollPrev, setCanScrollPrev] = useState(false);
 	const [canScrollNext, setCanScrollNext] = useState(false);
+	const [posts, setPosts] = useState<Post[]>([]);
+	const [loading, setLoading] = useState(true);
+	
+	// Image viewer state
+	const [viewerOpen, setViewerOpen] = useState(false);
+	const [viewerImages, setViewerImages] = useState<string[]>([]);
+	const [viewerIndex, setViewerIndex] = useState(0);
+	
+	// Use ref for WebSocket subscriptions to prevent re-subscription
+	const subscriptionsRef = useRef<StompSubscription[]>([]);
+	const currentUserRef = useRef<any>(null);
+
+	// Helper function to get full name
+	const getFullName = (poster: any): string => {
+		if (poster.userFirstName && poster.userLastName) {
+			return ` ${poster.userFirstName} ${poster.userLastName}`;
+		}
+		return poster.userName || 'Người dùng';
+	};
+
+	// Helper function to convert PosterDTO to Post
+	const convertPosterToPost = useCallback((poster: any, index?: number): Post => {
+		// Tính thời gian đã đăng
+		const createdDate = new Date(poster.createdAt);
+		const now = new Date();
+		const diffInMinutes = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60));
+		
+		let timeStr = '';
+		if (diffInMinutes < 60) {
+			timeStr = `${diffInMinutes} phút trước`;
+		} else if (diffInMinutes < 1440) {
+			timeStr = `${Math.floor(diffInMinutes / 60)} giờ trước`;
+		} else {
+			timeStr = `${Math.floor(diffInMinutes / 1440)} ngày trước`;
+		}
+
+		// Map privacy status
+		let audience: 'public' | 'friends' | 'private' = 'public';
+		if (poster.privacyStatusName === 'PUBLIC') {
+			audience = 'public';
+		} else if (poster.privacyStatusName === 'FRIENDS') {
+			audience = 'friends';
+		} else if (poster.privacyStatusName === 'PRIVATE') {
+			audience = 'private';
+		}
+
+		return {
+			id: poster.idPoster, // UUID từ backend
+			authorId: poster.idUser, // UUID của user
+			authorName: getFullName(poster), // Họ Tên đầy đủ
+			authorAvatar: poster.userAvatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80',
+			time: timeStr,
+			audience,
+			content: poster.content,
+			images: poster.imageUrls && poster.imageUrls.length > 0 ? poster.imageUrls : undefined,
+			image: poster.imageUrls && poster.imageUrls.length > 0 ? poster.imageUrls[0] : undefined,
+			reactions: 0,
+			comments: 0,
+			shares: 0
+		};
+	}, []);
+
+	// Fetch posters từ backend
+	useEffect(() => {
+		const fetchPosters = async () => {
+			try {
+				setLoading(true);
+				
+				// Lấy thông tin user hiện tại
+				const currentUser = getUserInfo();
+				console.log('📱 Current user:', currentUser);
+				currentUserRef.current = currentUser;
+				
+				if (!currentUser?.id) {
+					console.warn('⚠️ No user logged in, cannot fetch posters');
+					setPosts([]);
+					return;
+				}
+				
+				// Fetch posters với privacy filter
+				console.log('🔍 Fetching visible posters for user:', currentUser.id);
+				const posters = await getVisiblePosters(currentUser.id);
+				console.log('✅ Received posters:', posters.length, posters);
+				
+				// Chuyển đổi PosterDTO sang Post
+				const convertedPosts: Post[] = posters.map((poster, index) => 
+					convertPosterToPost(poster, index)
+				);
+
+				setPosts(convertedPosts);
+				console.log('✅ Converted posts:', convertedPosts.length);
+			} catch (error) {
+				console.error('❌ Error loading posters:', error);
+			} finally {
+				setLoading(false);
+			}
+		};
+
+		fetchPosters();
+	}, [convertPosterToPost]);
+
+	// WebSocket subscriptions for realtime updates
+	useEffect(() => {
+		const currentUser = currentUserRef.current;
+		if (!currentUser?.id) {
+			console.warn('⚠️ No user for WebSocket subscription');
+			return;
+		}
+
+		console.log('🔌 Setting up WebSocket subscriptions for poster feed...');
+
+		// Connect and subscribe
+		connect(() => {
+			console.log('✅ WebSocket connected, subscribing to poster topics...');
+
+			// Subscribe to new posters
+			const newPosterSub = subscribe('/topic/posters', (message) => {
+				try {
+					const newPoster = JSON.parse(message.body);
+					console.log('🆕 Received new poster:', newPoster);
+
+					// Check if user can see this poster based on privacy
+					const isOwner = newPoster.userId === currentUser.id;
+					const isPublic = newPoster.privacyStatusName === 'PUBLIC';
+					
+					// Add to feed if public or owner (friends check would need API call)
+					if (isPublic || isOwner) {
+						const newPost = convertPosterToPost(newPoster);
+						setPosts(prevPosts => [newPost, ...prevPosts]);
+						console.log('✅ Added new poster to feed');
+					} else {
+						console.log('🔒 Poster not visible to current user (privacy)');
+					}
+				} catch (error) {
+					console.error('❌ Error handling new poster:', error);
+				}
+			});
+			if (newPosterSub) subscriptionsRef.current.push(newPosterSub);
+
+			// Subscribe to updated posters
+			const updatedPosterSub = subscribe('/topic/posters/updated', (message) => {
+				try {
+					const updatedPoster = JSON.parse(message.body);
+					console.log('📝 Received updated poster:', updatedPoster);
+
+					setPosts(prevPosts => 
+						prevPosts.map(post => {
+							// Match by poster UUID
+							if (post.id === updatedPoster.idPoster) {
+								return convertPosterToPost(updatedPoster);
+							}
+							return post;
+						})
+					);
+					console.log('✅ Updated poster in feed');
+				} catch (error) {
+					console.error('❌ Error handling updated poster:', error);
+				}
+			});
+			if (updatedPosterSub) subscriptionsRef.current.push(updatedPosterSub);
+
+			// Subscribe to deleted posters
+			const deletedPosterSub = subscribe('/topic/posters/deleted', (message) => {
+				try {
+					const deletedPosterId = message.body; // Just the ID string
+					console.log('🗑️ Received deleted poster ID:', deletedPosterId);
+
+					// Remove from feed by poster UUID
+					setPosts(prevPosts => prevPosts.filter(post => post.id !== deletedPosterId));
+					console.log('✅ Removed deleted poster from feed');
+				} catch (error) {
+					console.error('❌ Error handling deleted poster:', error);
+				}
+			});
+			if (deletedPosterSub) subscriptionsRef.current.push(deletedPosterSub);
+
+			console.log('✅ All poster WebSocket subscriptions set up');
+		});
+
+		// Cleanup subscriptions on unmount
+		return () => {
+			console.log('🔌 Unsubscribing from poster topics...');
+			subscriptionsRef.current.forEach(sub => {
+				try {
+					sub.unsubscribe();
+				} catch (error) {
+					console.error('Error unsubscribing:', error);
+				}
+			});
+			subscriptionsRef.current = [];
+		};
+	}, [convertPosterToPost]); // Only depend on stable function
 
 	const updateStoryNav = useCallback(() => {
 		const el = storiesRef.current;
@@ -142,6 +304,41 @@ const Home: React.FC = () => {
 			left: direction === 'next' ? scrollAmount : -scrollAmount,
 			behavior: 'smooth',
 		});
+	};
+
+	// Delete post handler
+	const handleDeletePost = async (postId: string, authorId: string) => {
+		if (!window.confirm('Bạn có chắc chắn muốn xóa bài đăng này?')) {
+			return;
+		}
+
+		try {
+			await deletePoster(postId, authorId);
+			// WebSocket will handle removing from feed
+			console.log('✅ Poster deleted successfully');
+		} catch (err: any) {
+			console.error('Error deleting poster:', err);
+			alert(err.response?.data?.message || 'Không thể xóa bài đăng');
+		}
+	};
+
+	// Image viewer handlers
+	const openImageViewer = (images: string[], index: number) => {
+		setViewerImages(images);
+		setViewerIndex(index);
+		setViewerOpen(true);
+	};
+
+	const closeImageViewer = () => {
+		setViewerOpen(false);
+	};
+
+	const nextImage = () => {
+		setViewerIndex(prev => Math.min(prev + 1, viewerImages.length - 1));
+	};
+
+	const prevImage = () => {
+		setViewerIndex(prev => Math.max(prev - 1, 0));
 	};
 
 	return (
@@ -202,52 +399,113 @@ const Home: React.FC = () => {
 								</button>
 					</div>
 
-					<section className="fb-composer" aria-label="Tạo bài viết">
-						<div className="fb-composer__top">
-							<img src="https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=80&q=80" alt="Ảnh đại diện của bạn" />
-							<button type="button">Thuận ơi, bạn đang nghĩ gì thế?</button>
+				<section className="fb-composer" aria-label="Tạo bài viết">
+					<div className="fb-composer__top">
+						<img 
+							src={currentUserRef.current?.avatar || "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=80&q=80"} 
+							alt="Ảnh đại diện của bạn" 
+						/>
+						<button 
+							type="button"
+							onClick={() => navigate('/create-poster')}
+						>
+							{currentUserRef.current?.lastName || 'Bạn'} ơi, bạn đang nghĩ gì thế?
+						</button>
+					</div>
+					<div className="fb-composer__actions">
+						<button type="button" onClick={() => navigate('/create-poster')}>🎥 Video trực tiếp</button>
+						<button type="button" onClick={() => navigate('/create-poster')}>📷 Ảnh/video</button>
+						<button type="button" onClick={() => navigate('/create-poster')}>😊 Cảm xúc/hoạt động</button>
+					</div>
+				</section>					{loading ? (
+						<div className="fb-loading">
+							<p>Đang tải bài viết...</p>
 						</div>
-						<div className="fb-composer__actions">
-							<button type="button">🎥 Video trực tiếp</button>
-							<button type="button">📷 Ảnh/video</button>
-							<button type="button">😊 Cảm xúc/hoạt động</button>
+					) : posts.length === 0 ? (
+						<div className="fb-empty">
+							<p>Chưa có bài viết nào</p>
 						</div>
-					</section>
-
-					{posts.map(post => (
-						<article key={post.id} className="fb-post">
-							<header className="fb-post__header">
-								<img src={post.authorAvatar} alt={`Ảnh đại diện của ${post.authorName}`} />
-								<div>
-									<strong>{post.authorName}</strong>
-									<div className="fb-post__meta">
-										<span>{post.time}</span>
-										<span aria-hidden="true">·</span>
-										<span>{post.audience === 'public' ? '🌍 Công khai' : '👥 Bạn bè'}</span>
+					) : (
+						posts.map(post => (
+							<article key={post.id} className="fb-post">
+								<header className="fb-post__header">
+									<img src={post.authorAvatar} alt={`Ảnh đại diện của ${post.authorName}`} />
+									<div>
+										<strong>{post.authorName}</strong>
+										<div className="fb-post__meta">
+											<span>{post.time}</span>
+											<span aria-hidden="true">·</span>
+											<span>
+												{post.audience === 'public' && '🌍 Công khai'}
+												{post.audience === 'friends' && '👥 Bạn bè'}
+												{post.audience === 'private' && '🔒 Chỉ mình tôi'}
+											</span>
+										</div>
 									</div>
-								</div>
-								<button className="fb-post__more" aria-label="Tùy chọn bài viết">⋯</button>
-							</header>
+									<button className="fb-post__more" aria-label="Tùy chọn bài viết">⋯</button>
+								</header>
 							<p className="fb-post__content">{post.content}</p>
-											{post.image && (
-												<figure className="fb-post__image">
-													<img src={post.image} alt={`Ảnh minh họa cho bài viết của ${post.authorName}`} />
-												</figure>
+							{post.images && post.images.length > 0 && (
+								<figure className="fb-post__image">
+									{post.images.length === 1 ? (
+										<img 
+											src={post.images[0]} 
+											alt={`Ảnh của ${post.authorName}`}
+											onClick={() => openImageViewer(post.images!, 0)}
+										/>
+									) : (
+										<div className={`fb-post__image-grid ${post.images.length === 2 ? 'fb-post__image-grid--two' : ''}`}>
+											{post.images.slice(0, 4).map((img, idx) => (
+												<img 
+													key={idx} 
+													src={img} 
+													alt={`Ảnh ${idx + 1} của ${post.authorName}`}
+													onClick={() => openImageViewer(post.images!, idx)}
+												/>
+											))}
+											{post.images.length > 4 && (
+												<div 
+													className="fb-post__image-more"
+													onClick={() => openImageViewer(post.images!, 3)}
+												>
+													+{post.images.length - 4}
+												</div>
 											)}
+										</div>
+									)}
+								</figure>
+							)}
 							<footer className="fb-post__footer">
-								<div className="fb-post__stats">
-									<span>👍 {post.reactions.toLocaleString('vi-VN')}</span>
-									<span>{post.comments} bình luận</span>
-									<span>{post.shares} lượt chia sẻ</span>
-								</div>
-								<div className="fb-post__actions">
-									<button type="button">👍 Thích</button>
-									<button type="button">💬 Bình luận</button>
-									<button type="button">↗️ Chia sẻ</button>
-								</div>
-							</footer>
-						</article>
-					))}
+									<div className="fb-post__stats">
+										<span>👍 {post.reactions.toLocaleString('vi-VN')}</span>
+										<span>{post.comments} bình luận</span>
+										<span>{post.shares} lượt chia sẻ</span>
+									</div>
+									<div className="fb-post__actions">
+										<button type="button">👍 Thích</button>
+										<button type="button">💬 Bình luận</button>
+										<button type="button">↗️ Chia sẻ</button>
+										<button 
+											type="button" 
+											onClick={() => navigate(`/poster/${post.id}`)}
+											className="btn-view-detail"
+										>
+											📄 Xem chi tiết
+										</button>
+										{/* {currentUserRef.current && post.authorId === currentUserRef.current.id && (
+											<button 
+												type="button" 
+												onClick={() => handleDeletePost(post.id, post.authorId)}
+												className="btn-delete"
+											>
+												🗑️ Xóa
+											</button>
+										)} */}
+									</div>
+								</footer>
+							</article>
+						))
+					)}
 				</section>
 
 				<aside className="fb-rightbar" aria-label="Liên hệ">
@@ -269,6 +527,17 @@ const Home: React.FC = () => {
 					</div>
 				</aside>
 			</main>
+
+			{/* Image Viewer Modal */}
+			{viewerOpen && (
+				<ImageViewer
+					images={viewerImages}
+					currentIndex={viewerIndex}
+					onClose={closeImageViewer}
+					onNext={nextImage}
+					onPrev={prevImage}
+				/>
+			)}
 		</div>
 	);
 };

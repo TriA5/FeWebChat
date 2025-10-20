@@ -4,6 +4,7 @@ export interface JwtPayload {
   sub: string; // username
   role: string;
   avatar: string;
+  firstName: string;
   lastName: string;
   enabled: boolean;
   iat: number; // issued at
@@ -87,7 +88,8 @@ export const getUserInfo = (): {
   id?: string, 
   username?: string, 
   role?: string, 
-  avatar?: string, 
+  avatar?: string,
+  firstName?: string,
   lastName?: string,
   enabled?: boolean 
 } | null => {
@@ -99,6 +101,7 @@ export const getUserInfo = (): {
     username: payload.sub, // JWT standard field for subject (username)
     role: payload.role,
     avatar: payload.avatar,
+    firstName: payload.firstName,
     lastName: payload.lastName,
     enabled: payload.enabled
   };

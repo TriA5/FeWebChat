@@ -13,6 +13,9 @@ import PathActivationPage from "./layouts/user/PathActivationPage";
 import ProfileDetail from "./layouts/user/ProfileDetail";
 import GroupMembersPage from "./layouts/user/GroupMembersPage";
 import Home from "./layouts/TrangChu/Home";
+import CreatePoster from "./layouts/TrangChu/CreatePoster";
+import PosterDetail from "./layouts/TrangChu/PosterDetail";
+import EditPoster from "./layouts/TrangChu/EditPoster";
 import RequireAuth from "./components/RequireAuth";
 import HeaderHome from "./layouts/page/layout/HeaderHome";
 import GeminiChat from "./layouts/gemini/GeminiChat";
@@ -58,6 +61,30 @@ function App() {
             element={
               <RequireAuth>
                 <Home />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/create-poster"
+            element={
+              <RequireAuth>
+                <CreatePoster />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/poster/:posterId"
+            element={
+              <RequireAuth>
+                <PosterDetail />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/poster/:posterId/edit"
+            element={
+              <RequireAuth>
+                <EditPoster />
               </RequireAuth>
             }
           />
