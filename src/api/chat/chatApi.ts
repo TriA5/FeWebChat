@@ -38,7 +38,7 @@ export interface ConversationDTO {
 export async function ensureConversation(userAId: string, userBId: string): Promise<string> {
   const token = getToken();
   if (!token) throw new Error('No JWT token found');
-  const res = await fetch(`${API_BASE_URL}/chat/ensure?userAId=${encodeURIComponent(userAId)}&userBId=${encodeURIComponent(userBId)}`, {
+  const res = await fetch(`${API_BASE_URL}/chats/ensure?userAId=${encodeURIComponent(userAId)}&userBId=${encodeURIComponent(userBId)}`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` }
   });
@@ -51,7 +51,7 @@ export async function ensureConversation(userAId: string, userBId: string): Prom
 export async function getMessages(conversationId: string): Promise<ChatMessageDTO[]> {
   const token = getToken();
   if (!token) throw new Error('No JWT token found');
-  const res = await fetch(`${API_BASE_URL}/chat/${encodeURIComponent(conversationId)}/messages`, {
+  const res = await fetch(`${API_BASE_URL}/chats/${encodeURIComponent(conversationId)}/messages`, {
     method: 'GET',
     headers: {
       'Accept': 'application/json',
@@ -65,7 +65,7 @@ export async function getMessages(conversationId: string): Promise<ChatMessageDT
 export async function listConversations(userId: string): Promise<ConversationDTO[]> {
   const token = getToken();
   if (!token) throw new Error('No JWT token found');
-  const res = await fetch(`${API_BASE_URL}/chat/conversations?userId=${encodeURIComponent(userId)}`, {
+  const res = await fetch(`${API_BASE_URL}/chats/conversations?userId=${encodeURIComponent(userId)}`, {
     method: 'GET',
     headers: {
       'Accept': 'application/json',
@@ -191,7 +191,7 @@ export async function sendImageMessage(conversationId: string, senderId: string,
   const formData = new FormData();
   formData.append('image', imageFile);
   
-  const res = await fetch(`${API_BASE_URL}/chat/${encodeURIComponent(conversationId)}/send-image?senderId=${encodeURIComponent(senderId)}`, {
+  const res = await fetch(`${API_BASE_URL}/chats/${encodeURIComponent(conversationId)}/send-image?senderId=${encodeURIComponent(senderId)}`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` },
     body: formData
@@ -212,7 +212,7 @@ export async function sendGroupImageMessage(groupId: string, senderId: string, i
   const formData = new FormData();
   formData.append('image', imageFile);
   
-  const res = await fetch(`${API_BASE_URL}/chat/group/${encodeURIComponent(groupId)}/send-image?senderId=${encodeURIComponent(senderId)}`, {
+  const res = await fetch(`${API_BASE_URL}/chats/group/${encodeURIComponent(groupId)}/send-image?senderId=${encodeURIComponent(senderId)}`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` },
     body: formData
@@ -233,7 +233,7 @@ export async function sendFileMessage(conversationId: string, senderId: string, 
   const formData = new FormData();
   formData.append('file', file);
   
-  const res = await fetch(`${API_BASE_URL}/chat/${encodeURIComponent(conversationId)}/send-file?senderId=${encodeURIComponent(senderId)}`, {
+  const res = await fetch(`${API_BASE_URL}/chats/${encodeURIComponent(conversationId)}/send-file?senderId=${encodeURIComponent(senderId)}`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` },
     body: formData
@@ -254,7 +254,7 @@ export async function sendGroupFileMessage(groupId: string, senderId: string, fi
   const formData = new FormData();
   formData.append('file', file);
   
-  const res = await fetch(`${API_BASE_URL}/chat/group/${encodeURIComponent(groupId)}/send-file?senderId=${encodeURIComponent(senderId)}`, {
+  const res = await fetch(`${API_BASE_URL}/chats/group/${encodeURIComponent(groupId)}/send-file?senderId=${encodeURIComponent(senderId)}`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` },
     body: formData

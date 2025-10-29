@@ -23,7 +23,7 @@ export interface LoginResponse {
 
 export const authenticate = async (username: string, password: string): Promise<LoginResponse> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/user/authenticate`, {
+    const response = await fetch(`${API_BASE_URL}/users/authenticate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

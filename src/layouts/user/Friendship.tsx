@@ -10,11 +10,12 @@ import {
   sendFriendRequest as sendFriendRequestApi,
   acceptFriendRequest as acceptFriendRequestApi,
   rejectFriendRequest as rejectFriendRequestApi,
-  getFriendRequestsList,
+  getPendingFriendships,
   getFriendsList,
   unfriend
 } from '../../api/user/friendshipApi';
 import { getUserInfo } from '../../api/user/loginApi';
+import { getUserById } from '../../api/user/userApi';
 import { Users, UserPlus, Search as SearchIcon } from 'lucide-react';
 import './Friendship.css';
 
@@ -169,21 +170,64 @@ const Friendship: React.FC = () => {
   const loadFriendRequestsFromApi = async () => {
     try {
       setIsLoading(true);
-      const friendRequestsData = await getFriendRequestsList();
-      
-      // Transform SearchResult to FriendRequest format for display
-      const transformedRequests: FriendRequest[] = friendRequestsData.map((request, index) => ({
-        id: request.id, // 🎉 Real friendship ID from API!
-        userId: request.userId || request.id,
-        username: request.email, // Use email as username
-        firstName: request.firstName,
-        lastName: request.lastName,
-        avatar: request.avatar,
-        requestDate: new Date().toISOString() // Default to now
-      }));
-      
+      // Use raw pending friendships to preserve createdAt timestamp
+      const pending = await getPendingFriendships();
+
+      const parseCreatedAt = (createdAt: any): string => {
+        if (!createdAt) return new Date().toISOString();
+        // If backend returns ISO string
+        if (typeof createdAt === 'string') return createdAt;
+        // If backend returns array [year, month, day, hour, minute, second, ...]
+        if (Array.isArray(createdAt) && createdAt.length >= 3) {
+          try {
+            const [y, m, d, h = 0, min = 0, s = 0] = createdAt;
+            return new Date(y, m - 1, d, h, min, s).toISOString();
+          } catch (e) {
+            return new Date().toISOString();
+          }
+        }
+        return new Date().toISOString();
+      };
+
+      // If backend returns requesterId as a plain UUID string, fetch those users
+      const requesterIdStrings: string[] = pending
+        .filter(f => f && typeof (f as any).requesterId === 'string')
+        .map(f => (f as any).requesterId as string);
+
+      const uniqueIds = Array.from(new Set(requesterIdStrings));
+      const userMap: Record<string, any> = {};
+
+      if (uniqueIds.length > 0) {
+        const results = await Promise.allSettled(uniqueIds.map(id => getUserById(id)));
+        results.forEach((r, idx) => {
+          const id = uniqueIds[idx];
+          if (r.status === 'fulfilled' && r.value) {
+            userMap[id] = r.value;
+          } else {
+            userMap[id] = null;
+          }
+        });
+      }
+
+      const transformedRequests: FriendRequest[] = pending
+        .filter(f => f && (f as any).requesterId)
+        .map(f => {
+          const rawRequester = (f as any).requesterId;
+          const requesterObj = typeof rawRequester === 'string' ? userMap[rawRequester] : rawRequester;
+
+          return {
+            id: f.id,
+            userId: (requesterObj && (requesterObj.id || requesterObj.idUser)) || (typeof rawRequester === 'string' ? rawRequester : ''),
+            username: (requesterObj && (requesterObj.username || requesterObj.email)) || '',
+            firstName: (requesterObj && requesterObj.firstName) || '',
+            lastName: (requesterObj && requesterObj.lastName) || '',
+            avatar: (requesterObj && requesterObj.avatar) || '',
+            requestDate: parseCreatedAt((f as any).createdAt || (f as any).createdAt)
+          } as FriendRequest;
+        });
+
       setFriendRequests(transformedRequests);
-      console.log('Loaded friend requests:', transformedRequests);
+      console.log('Loaded friend requests (raw):', transformedRequests);
     } catch (error) {
       console.error('Failed to load friend requests:', error);
       setFriendRequests([]); // Set empty array on error

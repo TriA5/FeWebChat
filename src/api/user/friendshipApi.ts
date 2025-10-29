@@ -54,8 +54,8 @@ export interface Friend {
 // Interface for proper friendship API response (matching your backend exactly)
 export interface FriendshipRequest {
   id: string; // UUID - friendship ID from database
-  requester: Friend;
-  addressee: Friend;
+  requesterId: Friend;
+  addresseeId: Friend;
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
   createdAt: number[]; // LocalDateTime as array [year, month, day, hour, minute, second, nanosecond]
 }
@@ -338,7 +338,6 @@ export const getFriendsList = async (): Promise<SearchResult[]> => {
   }
 };
 
-// Get friend requests list - Using perfect API with Friendship objects
 export const getFriendRequestsList = async (): Promise<SearchResult[]> => {
   try {
     const currentUser = getUserInfo();
@@ -355,7 +354,6 @@ export const getFriendRequestsList = async (): Promise<SearchResult[]> => {
     const userId = currentUser.id;
     console.log('Getting friendships for user:', userId);
 
-    // Using API: GET /friendships/{userId}/friendships - Returns Friendship objects with IDs!
     const response = await fetch(`${API_BASE_URL}/friendships/${encodeURIComponent(userId)}/friendships`, {
       method: 'GET',
       headers: {
@@ -374,43 +372,53 @@ export const getFriendRequestsList = async (): Promise<SearchResult[]> => {
 
     const friendshipRequestsData: FriendshipRequest[] = await response.json();
     console.log('Friendships API response:', friendshipRequestsData);
+    console.table(friendshipRequestsData.map(f => ({
+        id: f.id,
+        status: f.status,
+        requesterId: f.requesterId?.idUser,
+        addresseeId: f.addresseeId?.idUser
+      })));
 
     const currentUserId = getUserInfo()?.id;
-    
-    // Filter only PENDING requests where current user is ADDRESSEE (person who can accept/reject)
-    const pendingRequestsToMe = friendshipRequestsData.filter(friendship => 
-      friendship.status === 'PENDING' && 
-      friendship.addressee.idUser === currentUserId
+
+    // ✅ Lọc an toàn: bỏ các phần tử null/undefined
+    const validFriendships = (friendshipRequestsData || []).filter(
+      f => f && f.addresseeId && f.requesterId
     );
+
+    // ✅ Chỉ lấy những request có trạng thái PENDING và mình là người được add (addressee)
+    const pendingRequestsToMe = validFriendships.filter(friendship =>
+      friendship.status === 'PENDING' &&
+      friendship.addresseeId?.idUser === currentUserId
+    );
+
     console.log('Filtered pending requests where I am addressee:', pendingRequestsToMe);
 
-    // Transform friendship requests data to SearchResult format
-    const transformedFriendRequests: SearchResult[] = pendingRequestsToMe.map(friendship => {
-      // Show the requester info (person who sent the friend request)
-      const requesterUser = friendship.requester;
-      
-      // Calculate age from dateOfBirth
-      const calculateAge = (dateOfBirth: string): number => {
-        const birth = new Date(dateOfBirth);
-        const today = new Date();
-        let age = today.getFullYear() - birth.getFullYear();
-        const monthDiff = today.getMonth() - birth.getMonth();
-        
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-          age--;
-        }
-        
-        return age;
-      };
+    // ✅ Hàm tính tuổi an toàn
+    const calculateAge = (dateOfBirth?: string): number => {
+      if (!dateOfBirth) return 0;
+      const birth = new Date(dateOfBirth);
+      if (isNaN(birth.getTime())) return 0;
+      const today = new Date();
+      let age = today.getFullYear() - birth.getFullYear();
+      const monthDiff = today.getMonth() - birth.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+        age--;
+      }
+      return age;
+    };
 
+    // ✅ Map an toàn
+    const transformedFriendRequests: SearchResult[] = pendingRequestsToMe.map(friendship => {
+      const requesterUser = friendship.requesterId ?? {}; // fallback
       return {
-        id: friendship.id, // 🎯 Real friendship ID!
-        userId: requesterUser.idUser,
-        firstName: requesterUser.firstName,
-        lastName: requesterUser.lastName,
-        email: requesterUser.email,
-        phoneNumber: requesterUser.phoneNumber,
-        avatar: requesterUser.avatar || '',
+        id: friendship.id ?? 0,
+        userId: requesterUser.idUser ?? 0,
+        firstName: requesterUser.firstName ?? '',
+        lastName: requesterUser.lastName ?? '',
+        email: requesterUser.email ?? '',
+        phoneNumber: requesterUser.phoneNumber ?? '',
+        avatar: requesterUser.avatar ?? '',
         age: calculateAge(requesterUser.dateOfBirth),
         gender: requesterUser.gender ? 'Nam' : 'Nữ',
         status: requesterUser.status ? 'online' : 'offline'
@@ -426,6 +434,7 @@ export const getFriendRequestsList = async (): Promise<SearchResult[]> => {
   }
 };
 
+
 // Unfriend - Hủy kết bạn
 export const unfriend = async (friendId: string): Promise<boolean> => {
   try {
@@ -440,7 +449,7 @@ export const unfriend = async (friendId: string): Promise<boolean> => {
     }
 
     const response = await fetch(`${API_BASE_URL}/friendships/unfriend?userId=${encodeURIComponent(currentUser.id)}&friendId=${encodeURIComponent(friendId)}`, {
-      method: 'POST',
+      method: 'DELETE',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -459,5 +468,42 @@ export const unfriend = async (friendId: string): Promise<boolean> => {
   } catch (error) {
     console.error('Unfriend error:', error);
     throw error;
+  }
+};
+
+// Fetch raw pending friendship objects (keeps API shape including createdAt)
+export const getPendingFriendships = async (): Promise<FriendshipRequest[]> => {
+  try {
+    const currentUser = getUserInfo();
+    if (!currentUser || !currentUser.id) {
+      console.error('No current user or user ID found');
+      return [];
+    }
+
+    const token = getToken();
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    const userId = currentUser.id;
+    const response = await fetch(`${API_BASE_URL}/friendships/${encodeURIComponent(userId)}/pending`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) return [];
+      throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+    }
+
+    const data: FriendshipRequest[] = await response.json();
+    return data || [];
+  } catch (error) {
+    console.error('Get pending friendships error:', error);
+    return [];
   }
 };

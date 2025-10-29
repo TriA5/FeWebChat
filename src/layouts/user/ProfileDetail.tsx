@@ -81,7 +81,7 @@ const ProfileDetail: React.FC = () => {
       if (!id) return;
       try {
         const res = await axios.get<UserDetail>(
-          `http://localhost:8080/users/search/findByIdUser?IdUser=${id}`
+          `http://localhost:8080/api/users/search/findByIdUser?IdUser=${id}`
           
         );
         setUser(res.data);

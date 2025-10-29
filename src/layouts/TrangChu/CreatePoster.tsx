@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './CreatePoster.css';
 import { createPoster } from '../../api/poster/posterApi';
@@ -12,6 +12,8 @@ const CreatePoster: React.FC = () => {
 	const [previews, setPreviews] = useState<string[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState('');
+	const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
 	const currentUser = getUserInfo();
 
@@ -135,6 +137,7 @@ const CreatePoster: React.FC = () => {
 								<select 
 									value={privacyStatus} 
 									onChange={(e) => setPrivacyStatus(e.target.value as any)}
+									aria-label="Quyền riêng tư"
 								>
 									<option value="PUBLIC">🌍 Công khai</option>
 									<option value="FRIENDS">👥 Bạn bè</option>
@@ -179,13 +182,57 @@ const CreatePoster: React.FC = () => {
 								accept="image/*"
 								multiple
 								onChange={handleImageChange}
-								style={{ display: 'none' }}
+								className="create-poster__file-input-hidden"
 							/>
 							📷 Ảnh/video
 						</label>
-						<span className="create-poster__action-btn">😊 Cảm xúc</span>
+						<button
+							type="button"
+							className="create-poster__action-btn"
+							onClick={() => setShowEmojiPicker(prev => !prev)}
+						>
+							😊 Cảm xúc
+						</button>
 						<span className="create-poster__action-btn">📍 Vị trí</span>
 					</div>
+
+					{/* Emoji picker popup (simple inline grid) */}
+					{showEmojiPicker && (
+						<div className="create-poster__emoji-picker" role="dialog" aria-label="Chọn biểu tượng cảm xúc">
+							{[
+								'😊','😂','😍','👍','🎉','😢','😮','🔥','❤️','🙌','👏','🤔','😴','🤩','😎'
+							].map((emoji) => (
+								<button
+									key={emoji}
+									type="button"
+									className="create-poster__emoji"
+									onClick={() => {
+										// insert emoji at cursor
+										const ta = textareaRef.current;
+										if (!ta) {
+											setContent(prev => prev + emoji);
+											return;
+										}
+										const start = ta.selectionStart || 0;
+										const end = ta.selectionEnd || 0;
+										const newText = content.slice(0, start) + emoji + content.slice(end);
+										setContent(newText);
+										// move cursor after inserted emoji
+										setTimeout(() => {
+											ta.focus();
+											ta.selectionStart = ta.selectionEnd = start + emoji.length;
+										}, 0);
+										// keep picker open for multiple picks
+									}}
+								>
+									{emoji}
+								</button>
+							))}
+							<div className="create-poster__emoji-footer">
+								<button type="button" className="create-poster__action-btn" onClick={() => setShowEmojiPicker(false)}>Đóng</button>
+							</div>
+						</div>
+					)}
 
 					{/* Error */}
 					{error && (

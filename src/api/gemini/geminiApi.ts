@@ -23,7 +23,7 @@ export const askGemini = async (prompt: string): Promise<string> => {
   try {
     const token = getToken();
     
-    const response = await fetch(`${API_BASE_URL}/api/gemini/ask`, {
+    const response = await fetch(`${API_BASE_URL}/gemini/ask`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

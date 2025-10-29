@@ -19,7 +19,7 @@ export interface PosterDTO {
 // Lấy tất cả posters
 export const getAllPosters = async (): Promise<PosterDTO[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/posters`);
+    const response = await axios.get(`${API_BASE_URL}/posters`);
     return response.data;
   } catch (error) {
     console.error('Error fetching posters:', error);
@@ -30,7 +30,7 @@ export const getAllPosters = async (): Promise<PosterDTO[]> => {
 // Lấy posters visible cho user (respecting privacy)
 export const getVisiblePosters = async (viewerId: string): Promise<PosterDTO[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/posters/feed/${viewerId}`);
+    const response = await axios.get(`${API_BASE_URL}/posters/feed/${viewerId}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching visible posters:', error);
@@ -41,7 +41,7 @@ export const getVisiblePosters = async (viewerId: string): Promise<PosterDTO[]> 
 // Lấy posters theo user ID
 export const getPostersByUserId = async (userId: string): Promise<PosterDTO[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/posters/user/${userId}`);
+    const response = await axios.get(`${API_BASE_URL}/posters/user/${userId}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching user posters:', error);
@@ -52,7 +52,7 @@ export const getPostersByUserId = async (userId: string): Promise<PosterDTO[]> =
 // Lấy poster theo ID
 export const getPosterById = async (posterId: string): Promise<PosterDTO> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/posters/${posterId}`);
+    const response = await axios.get(`${API_BASE_URL}/posters/${posterId}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching poster:', error);
@@ -68,7 +68,7 @@ export const createPoster = async (posterData: {
   imageUrls?: string[];
 }): Promise<any> => {
   try {
-    const response = await axios.post(`${API_BASE_URL}/api/posters`, posterData);
+    const response = await axios.post(`${API_BASE_URL}/posters`, posterData);
     return response.data;
   } catch (error) {
     console.error('Error creating poster:', error);
@@ -87,7 +87,7 @@ export const updatePoster = async (
   }
 ): Promise<any> => {
   try {
-    const response = await axios.put(`${API_BASE_URL}/api/posters/${posterId}`, posterData);
+    const response = await axios.put(`${API_BASE_URL}/posters/${posterId}`, posterData);
     return response.data;
   } catch (error) {
     console.error('Error updating poster:', error);
@@ -98,7 +98,7 @@ export const updatePoster = async (
 // Xóa poster
 export const deletePoster = async (posterId: string, userId: string): Promise<any> => {
   try {
-    const response = await axios.delete(`${API_BASE_URL}/api/posters/${posterId}`, {
+    const response = await axios.delete(`${API_BASE_URL}/posters/${posterId}`, {
       data: { idUser: userId }
     });
     return response.data;

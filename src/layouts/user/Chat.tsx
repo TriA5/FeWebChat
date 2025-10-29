@@ -1453,7 +1453,7 @@ const Chat: React.FC = () => {
                       disabled={!!activeGroupCall || !!activeCall}
                       title="Gọi video nhóm"
                     >
-                      📹 Gọi nhóm
+                      📹
                     </button>
                     <button 
                       className="action-btn" 

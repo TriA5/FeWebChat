@@ -20,7 +20,7 @@ const EditPoster: React.FC = () => {
 	// Helper function to get full name
 	const getFullName = (): string => {
 		if (currentUser?.firstName && currentUser?.lastName) {
-			return `${currentUser.lastName} ${currentUser.firstName}`;
+			return `${currentUser.lastName}`;
 		}
 		return currentUser?.username || 'Người dùng';
 	};

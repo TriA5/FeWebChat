@@ -24,7 +24,7 @@ export const registerUser = async (userData: RegisterRequest): Promise<RegisterR
   try {
     console.log('Sending registration data:', userData);
 
-    const response = await fetch(`${API_BASE_URL}/user/register`, {
+    const response = await fetch(`${API_BASE_URL}/users/register`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(userData),

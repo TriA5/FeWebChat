@@ -20,7 +20,7 @@ export interface UpdateProfileResponse {
 export const updateUserProfile = async (payload: UpdateProfileRequest): Promise<UpdateProfileResponse> => {
   try {
     const token = getToken();
-    const response = await fetch(`${API_BASE_URL}/user/update-profile`, {
+    const response = await fetch(`${API_BASE_URL}/users/update-profile`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',

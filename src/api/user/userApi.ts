@@ -14,7 +14,7 @@ export async function getUserById(userId: string): Promise<BasicUserDTO | null> 
   if (!userId) return null;
   const token = getToken();
   if (!token) throw new Error('No JWT token found');
-  const res = await fetch(`${API_BASE_URL}/user/${encodeURIComponent(userId)}`, {
+  const res = await fetch(`${API_BASE_URL}/users/${encodeURIComponent(userId)}`, {
     method: 'GET',
     headers: {
       'Accept': 'application/json',

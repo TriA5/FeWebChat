@@ -22,7 +22,7 @@ export const changeAvatar = async (idUser: string, avatarDataUrl: string): Promi
     }
     const body: ChangeAvatarRequest = { idUser, avatar: avatarDataUrl };
 
-    const response = await fetch(`${API_BASE_URL}/user/change-avatar`, {
+    const response = await fetch(`${API_BASE_URL}/users/change-avatar`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
