@@ -27,6 +27,7 @@
 
 .header-nav {
   display: flex;
+  align-items: center;
   gap: 18px;
 }
 

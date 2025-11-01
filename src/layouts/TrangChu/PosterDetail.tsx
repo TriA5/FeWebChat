@@ -1,9 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getPosterById, deletePoster, PosterDTO } from '../../api/poster/posterApi';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import ImageViewer from '../../components/ImageViewer';
+import { likePoster, unlikePoster, getTotalLikes, checkUserLikedPoster, setUserLikedPoster } from '../../api/poster/likeApi';
+import { getCommentsByPosterId, formatCommentTime, countTotalComments, createComment, replyToComment, updateComment, deleteComment, type Comment } from '../../api/poster/commentApi';
+import { getUserById } from '../../api/user/userApi';
 import './PosterDetail.css';
+import './Home.css'; // Import để sử dụng comment styles
 
 const PosterDetail: React.FC = () => {
   const { posterId } = useParams<{ posterId: string }>();
@@ -20,47 +24,34 @@ const PosterDetail: React.FC = () => {
   const [viewerImages, setViewerImages] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
 
-  // Fake data for future development (reactions, comments, shares)
-  const [reactions, setReactions] = useState({
-    like: 245,
-    love: 89,
-    haha: 34,
-    wow: 12,
-    sad: 5,
-    angry: 2
-  });
-  const [totalReactions, setTotalReactions] = useState(387);
-  const [totalComments, setTotalComments] = useState(56);
-  const [totalShares, setTotalShares] = useState(23);
-  const [userReaction, setUserReaction] = useState<string | null>(null); // null, 'like', 'love', etc.
+  // Like state
+  const [likeCount, setLikeCount] = useState(0);
+  const [userLiked, setUserLiked] = useState(false);
+  const [likingInProgress, setLikingInProgress] = useState(false);
+  
+  // Comment state
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentCount, setCommentCount] = useState(0);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commentInput, setCommentInput] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  
+  // Reply state
+  const [replyingTo, setReplyingTo] = useState<string | null>(null); // commentId
+  const [replyInputs, setReplyInputs] = useState<Record<string, string>>({}); // commentId -> content
+  const [submittingReply, setSubmittingReply] = useState<Record<string, boolean>>({}); // commentId -> loading
+  
+  // Edit state
+  const [editingComment, setEditingComment] = useState<string | null>(null); // commentId
+  const [editInputs, setEditInputs] = useState<Record<string, string>>({}); // commentId -> content
+  const [submittingEdit, setSubmittingEdit] = useState<Record<string, boolean>>({}); // commentId -> loading
+  
+  const currentUserRef = useRef<any>(currentUser);
 
-  // Fake comments data
-  const [comments, setComments] = useState([
-    {
-      id: '1',
-      userName: 'Nguyễn Văn A',
-      userAvatar: 'https://i.pravatar.cc/150?img=1',
-      content: 'Bài viết rất hay và bổ ích! Cảm ơn bạn đã chia sẻ 👍',
-      timestamp: new Date(Date.now() - 3600000).toISOString(),
-      likes: 12
-    },
-    {
-      id: '2',
-      userName: 'Trần Thị B',
-      userAvatar: 'https://i.pravatar.cc/150?img=2',
-      content: 'Mình cũng nghĩ vậy. Rất đồng ý với quan điểm này.',
-      timestamp: new Date(Date.now() - 7200000).toISOString(),
-      likes: 8
-    },
-    {
-      id: '3',
-      userName: 'Lê Minh C',
-      userAvatar: 'https://i.pravatar.cc/150?img=3',
-      content: 'Có thể giải thích rõ hơn về phần này được không? 🤔',
-      timestamp: new Date(Date.now() - 10800000).toISOString(),
-      likes: 3
-    }
-  ]);
+  // Update currentUserRef when currentUser changes
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
 
   const loadPoster = useCallback(async () => {
     if (!posterId) {
@@ -74,17 +65,73 @@ const PosterDetail: React.FC = () => {
       setError(null);
       const data = await getPosterById(posterId);
       setPoster(data);
+      
+      // Load likes
+      if (currentUser?.id) {
+        const count = await getTotalLikes(posterId);
+        setLikeCount(count);
+        
+        const liked = checkUserLikedPoster(posterId, currentUser.id);
+        setUserLiked(liked);
+      }
+      
+      // Load comments
+      setLoadingComments(true);
+      const postComments = await getCommentsByPosterId(posterId);
+      const enrichedComments = await enrichCommentsWithUserData(postComments);
+      setComments(enrichedComments);
+      setCommentCount(countTotalComments(postComments));
+      setLoadingComments(false);
+      
     } catch (err: any) {
       console.error('Error loading poster:', err);
       setError(err.response?.data?.message || 'Không thể tải poster');
     } finally {
       setLoading(false);
     }
-  }, [posterId]);
+  }, [posterId, currentUser]);
 
   useEffect(() => {
     loadPoster();
   }, [loadPoster]);
+  
+  // Enrich comments with user data
+  const enrichCommentsWithUserData = async (commentList: Comment[]): Promise<Comment[]> => {
+    const userCache: Record<string, any> = {};
+    
+    const enrichComment = async (comment: Comment): Promise<Comment> => {
+      // Fetch user data if not cached
+      if (!userCache[comment.idUser]) {
+        try {
+          const userData = await getUserById(comment.idUser);
+          userCache[comment.idUser] = userData;
+        } catch (error) {
+          console.error(`Error fetching user ${comment.idUser}:`, error);
+          userCache[comment.idUser] = null;
+        }
+      }
+      
+      const user = userCache[comment.idUser];
+      const enrichedComment = {
+        ...comment,
+        userName: user?.username || 'Người dùng',
+        userAvatar: user?.avatar || '',
+        userFirstName: user?.firstName || '',
+        userLastName: user?.lastName || ''
+      };
+      
+      // Recursively enrich replies
+      if (comment.replies && comment.replies.length > 0) {
+        enrichedComment.replies = await Promise.all(
+          comment.replies.map(reply => enrichComment(reply))
+        );
+      }
+      
+      return enrichedComment;
+    };
+    
+    return Promise.all(commentList.map(enrichComment));
+  };
 
   const handleDelete = async () => {
     if (!poster || !currentUser) return;
@@ -110,57 +157,291 @@ const PosterDetail: React.FC = () => {
     navigate(`/poster/${posterId}/edit`);
   };
 
-  // Fake handlers for future development
-  const handleReaction = (reactionType: string) => {
-    if (userReaction === reactionType) {
-      // Remove reaction
-      setUserReaction(null);
-      setTotalReactions(prev => prev - 1);
-      setReactions(prev => ({
-        ...prev,
-        [reactionType]: prev[reactionType as keyof typeof prev] - 1
-      }));
-    } else {
-      // Add or change reaction
-      if (userReaction) {
-        // Change reaction
-        setReactions(prev => ({
-          ...prev,
-          [userReaction]: prev[userReaction as keyof typeof prev] - 1,
-          [reactionType]: prev[reactionType as keyof typeof prev] + 1
-        }));
+  // Like/Unlike handler
+  const handleLikeToggle = async () => {
+    if (!posterId || !currentUser?.id) {
+      alert('Vui lòng đăng nhập để thích bài viết');
+      return;
+    }
+
+    if (likingInProgress) {
+      return;
+    }
+
+    const isCurrentlyLiked = userLiked;
+    const currentCount = likeCount;
+
+    // Optimistic update
+    setUserLiked(!isCurrentlyLiked);
+    setLikeCount(isCurrentlyLiked ? Math.max(0, currentCount - 1) : currentCount + 1);
+    setLikingInProgress(true);
+
+    try {
+      let success = false;
+      if (isCurrentlyLiked) {
+        success = await unlikePoster(posterId, currentUser.id);
+        if (success) {
+          setUserLikedPoster(posterId, currentUser.id, false);
+        }
       } else {
-        // New reaction
-        setTotalReactions(prev => prev + 1);
-        setReactions(prev => ({
-          ...prev,
-          [reactionType]: prev[reactionType as keyof typeof prev] + 1
-        }));
+        success = await likePoster(posterId, currentUser.id);
+        if (success) {
+          setUserLikedPoster(posterId, currentUser.id, true);
+        }
       }
-      setUserReaction(reactionType);
+
+      if (!success) {
+        // Revert on failure
+        setUserLiked(isCurrentlyLiked);
+        setLikeCount(currentCount);
+      } else {
+        // Fetch updated count from server
+        const newCount = await getTotalLikes(posterId);
+        setLikeCount(newCount);
+      }
+    } catch (error) {
+      console.error('❌ Error toggling like:', error);
+      setUserLiked(isCurrentlyLiked);
+      setLikeCount(currentCount);
+    } finally {
+      setLikingInProgress(false);
     }
   };
 
-  const handleComment = (content: string) => {
-    if (!content.trim() || !currentUser) return;
+  // Submit comment handler
+  const handleSubmitComment = async () => {
+    if (!posterId || !currentUser?.id) {
+      alert('Vui lòng đăng nhập để bình luận');
+      return;
+    }
 
-    const newComment = {
-      id: Date.now().toString(),
-      userName: `${currentUser.lastName} ${currentUser.firstName}`,
-      userAvatar: currentUser.avatar || 'https://i.pravatar.cc/150?img=99',
-      content: content.trim(),
-      timestamp: new Date().toISOString(),
-      likes: 0
-    };
+    const content = commentInput.trim();
+    if (!content) {
+      return;
+    }
 
-    setComments(prev => [newComment, ...prev]);
-    setTotalComments(prev => prev + 1);
+    setSubmittingComment(true);
+
+    try {
+      const newComment = await createComment(posterId, currentUser.id, content);
+      
+      if (newComment) {
+        const userData = await getUserById(currentUser.id);
+        
+        const enrichedComment: Comment = {
+          ...newComment,
+          userName: userData?.username || currentUser.username || 'Người dùng',
+          userAvatar: userData?.avatar || currentUser.avatar || '',
+          userFirstName: userData?.firstName || currentUser.firstName || '',
+          userLastName: userData?.lastName || currentUser.lastName || '',
+          replies: [],
+          replyCount: 0
+        };
+
+        setComments(prev => [enrichedComment, ...prev]);
+        setCommentCount(prev => prev + 1);
+        setCommentInput('');
+        
+        console.log('✅ Comment added successfully');
+      } else {
+        alert('Không thể thêm bình luận. Vui lòng thử lại.');
+      }
+    } catch (error) {
+      console.error('❌ Error submitting comment:', error);
+      alert('Có lỗi xảy ra khi thêm bình luận.');
+    } finally {
+      setSubmittingComment(false);
+    }
   };
 
-  const handleShare = () => {
-    // Fake share functionality
-    setTotalShares(prev => prev + 1);
-    alert('Đã chia sẻ bài viết! (Chức năng demo)');
+  // Toggle reply input for a comment
+  const handleToggleReply = (commentId: string) => {
+    setReplyingTo(prev => prev === commentId ? null : commentId);
+  };
+
+  // Submit reply to a comment
+  const handleSubmitReply = async (parentCommentId: string) => {
+    if (!posterId || !currentUser?.id) {
+      alert('Vui lòng đăng nhập để trả lời bình luận');
+      return;
+    }
+
+    const content = replyInputs[parentCommentId]?.trim();
+    if (!content) {
+      return;
+    }
+
+    setSubmittingReply(prev => ({ ...prev, [parentCommentId]: true }));
+
+    try {
+      const newReply = await replyToComment(posterId, parentCommentId, currentUser.id, content);
+      
+      if (newReply) {
+        const userData = await getUserById(currentUser.id);
+        
+        const enrichedReply: Comment = {
+          ...newReply,
+          userName: userData?.username || currentUser.username || 'Người dùng',
+          userAvatar: userData?.avatar || currentUser.avatar || '',
+          userFirstName: userData?.firstName || currentUser.firstName || '',
+          userLastName: userData?.lastName || currentUser.lastName || '',
+          replies: [],
+          replyCount: 0
+        };
+
+        setComments(prev => {
+          const updateCommentReplies = (commentsList: Comment[]): Comment[] => {
+            return commentsList.map(comment => {
+              if (comment.idComment === parentCommentId) {
+                return {
+                  ...comment,
+                  replies: [enrichedReply, ...(comment.replies || [])],
+                  replyCount: (comment.replyCount || 0) + 1
+                };
+              } else if (comment.replies && comment.replies.length > 0) {
+                return {
+                  ...comment,
+                  replies: updateCommentReplies(comment.replies)
+                };
+              }
+              return comment;
+            });
+          };
+
+          return updateCommentReplies(prev);
+        });
+
+        setCommentCount(prev => prev + 1);
+        setReplyInputs(prev => {
+          const newState = { ...prev };
+          delete newState[parentCommentId];
+          return newState;
+        });
+        setReplyingTo(null);
+
+        console.log('✅ Reply added successfully');
+      } else {
+        alert('Không thể thêm phản hồi. Vui lòng thử lại.');
+      }
+    } catch (error) {
+      console.error('❌ Error submitting reply:', error);
+      alert('Có lỗi xảy ra khi thêm phản hồi.');
+    } finally {
+      setSubmittingReply(prev => ({ ...prev, [parentCommentId]: false }));
+    }
+  };
+
+  // Toggle edit mode for a comment
+  const handleToggleEdit = (commentId: string, currentContent: string) => {
+    setEditingComment(prev => {
+      if (prev === commentId) {
+        return null;
+      } else {
+        setEditInputs(prevInputs => ({ ...prevInputs, [commentId]: currentContent }));
+        return commentId;
+      }
+    });
+  };
+
+  // Submit edited comment
+  const handleSubmitEdit = async (commentId: string) => {
+    if (!posterId || !currentUser?.id) {
+      alert('Vui lòng đăng nhập để sửa bình luận');
+      return;
+    }
+
+    const content = editInputs[commentId]?.trim();
+    if (!content) {
+      return;
+    }
+
+    setSubmittingEdit(prev => ({ ...prev, [commentId]: true }));
+
+    try {
+      const updatedComment = await updateComment(posterId, commentId, currentUser.id, content);
+      
+      if (updatedComment) {
+        setComments(prev => {
+          const updateCommentContent = (commentsList: Comment[]): Comment[] => {
+            return commentsList.map(comment => {
+              if (comment.idComment === commentId) {
+                return {
+                  ...comment,
+                  content: updatedComment.content,
+                  updatedAt: updatedComment.updatedAt
+                };
+              } else if (comment.replies && comment.replies.length > 0) {
+                return {
+                  ...comment,
+                  replies: updateCommentContent(comment.replies)
+                };
+              }
+              return comment;
+            });
+          };
+
+          return updateCommentContent(prev);
+        });
+
+        setEditInputs(prev => {
+          const newState = { ...prev };
+          delete newState[commentId];
+          return newState;
+        });
+        setEditingComment(null);
+
+        console.log('✅ Comment updated successfully');
+      } else {
+        alert('Không thể cập nhật bình luận. Vui lòng thử lại.');
+      }
+    } catch (error) {
+      console.error('❌ Error updating comment:', error);
+      alert('Có lỗi xảy ra khi cập nhật bình luận.');
+    } finally {
+      setSubmittingEdit(prev => ({ ...prev, [commentId]: false }));
+    }
+  };
+
+  // Delete a comment
+  const handleDeleteComment = async (commentId: string) => {
+    if (!posterId || !currentUser?.id) {
+      alert('Vui lòng đăng nhập để xóa bình luận');
+      return;
+    }
+
+    if (!window.confirm('Bạn có chắc chắn muốn xóa bình luận này?')) {
+      return;
+    }
+
+    try {
+      const success = await deleteComment(posterId, commentId, currentUser.id);
+      
+      if (success) {
+        setComments(prev => {
+          const removeComment = (commentsList: Comment[]): Comment[] => {
+            return commentsList.filter(comment => {
+              if (comment.idComment === commentId) {
+                return false;
+              } else if (comment.replies && comment.replies.length > 0) {
+                comment.replies = removeComment(comment.replies);
+              }
+              return true;
+            });
+          };
+
+          return removeComment(prev);
+        });
+
+        setCommentCount(prev => Math.max(0, prev - 1));
+
+        console.log('✅ Comment deleted successfully');
+      } else {
+        alert('Không thể xóa bình luận. Vui lòng thử lại.');
+      }
+    } catch (error) {
+      console.error('❌ Error deleting comment:', error);
+      alert('Có lỗi xảy ra khi xóa bình luận.');
+    }
   };
 
   const openImageViewer = (images: string[], index: number) => {
@@ -343,91 +624,295 @@ const PosterDetail: React.FC = () => {
           {/* Stats Section */}
           <div className="poster-detail-card__stats-bar">
             <div className="stats-left">
-              <div className="reaction-icons">
-                <span className="reaction-icon">👍</span>
-                <span className="reaction-icon">❤️</span>
-                <span className="reaction-icon">😂</span>
-              </div>
-              <span className="stats-count">{totalReactions.toLocaleString('vi-VN')}</span>
+              <span className={likeCount > 0 ? 'has-reactions' : ''}>
+                👍 {likeCount.toLocaleString('vi-VN')}
+              </span>
             </div>
             <div className="stats-right">
-              <span className="stats-item">{totalComments} bình luận</span>
-              <span className="stats-item">{totalShares} lượt chia sẻ</span>
+              <span className="stats-item">{commentCount} bình luận</span>
+              <span className="stats-item">0 lượt chia sẻ</span>
             </div>
           </div>
 
           {/* Action Buttons */}
           <div className="poster-detail-card__actions-bar">
             <button 
-              className={`action-btn ${userReaction === 'like' ? 'active' : ''}`}
-              onClick={() => handleReaction('like')}
+              className={`action-btn ${userLiked ? 'active liked' : ''}`}
+              onClick={handleLikeToggle}
+              disabled={likingInProgress}
             >
-              👍 Thích
+              {userLiked ? '❤️ Đã thích' : '👍 Thích'}
             </button>
             <button className="action-btn">
               💬 Bình luận
             </button>
-            <button className="action-btn" onClick={handleShare}>
+            <button className="action-btn">
               ↗️ Chia sẻ
             </button>
           </div>
 
           {/* Comments Section */}
-          <div className="poster-detail-card__comments">
-            <h3 className="comments-title">Bình luận ({totalComments})</h3>
+          <div className="poster-detail-card__comments fb-post__comments">
+            <h3 className="comments-title">Bình luận ({commentCount})</h3>
             
             {/* Comment Input */}
             {currentUser && (
-              <div className="comment-input-container">
+              <div className="fb-comment-input">
                 <img
                   src={currentUser.avatar || '/default-avatar.png'}
                   alt={currentUser.username}
-                  className="comment-avatar"
+                  className="fb-comment-input__avatar"
                 />
-                <div className="comment-input-wrapper">
+                <div className="fb-comment-input__field-wrapper">
                   <input
                     type="text"
                     placeholder="Viết bình luận..."
-                    className="comment-input"
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        handleComment(e.currentTarget.value);
-                        e.currentTarget.value = '';
+                    className="fb-comment-input__field"
+                    value={commentInput}
+                    onChange={(e) => setCommentInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSubmitComment();
                       }
                     }}
+                    disabled={submittingComment}
                   />
+                  {commentInput.trim() && (
+                    <button
+                      type="button"
+                      onClick={handleSubmitComment}
+                      disabled={submittingComment}
+                      className="fb-comment-input__submit"
+                    >
+                      {submittingComment ? '...' : '➤'}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
 
             {/* Comments List */}
-            <div className="comments-list">
-              {comments.map((comment) => (
-                <div key={comment.id} className="comment-item">
-                  <div className="comment-author-section">
-                    <img
-                      src={comment.userAvatar}
-                      alt={comment.userName}
-                      className="comment-avatar"
+            {loadingComments ? (
+              <div className="fb-comments-loading">Đang tải bình luận...</div>
+            ) : comments.length > 0 ? (
+              <div className="fb-comments-list">
+                {comments.map(comment => (
+                  <div key={comment.idComment} className="fb-comment">
+                    <img 
+                      src={comment.userAvatar || '/default-avatar.png'} 
+                      alt={`${comment.userFirstName} ${comment.userLastName}`}
+                      className="fb-comment__avatar"
                     />
-                    <h4 className="comment-author-name">{comment.userName}</h4>
-                  </div>
-                  <div className="comment-content">
-                    <div className="comment-bubble">
-                      <p className="comment-text">{comment.content}</p>
-                    </div>
-                    <div className="comment-meta">
-                      <span className="comment-action">Thích</span>
-                      <span className="comment-action">Trả lời</span>
-                      <span className="comment-time">{formatDate(comment.timestamp)}</span>
-                      {comment.likes > 0 && (
-                        <span className="comment-likes">👍 {comment.likes}</span>
+                    <div className="fb-comment__content">
+                      {editingComment === comment.idComment ? (
+                        // Edit Mode
+                        <div className="fb-comment__edit">
+                          <input
+                            type="text"
+                            value={editInputs[comment.idComment] || ''}
+                            onChange={(e) => setEditInputs(prev => ({ ...prev, [comment.idComment]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSubmitEdit(comment.idComment);
+                              } else if (e.key === 'Escape') {
+                                handleToggleEdit(comment.idComment, comment.content);
+                              }
+                            }}
+                            className="fb-comment__edit-field"
+                            disabled={submittingEdit[comment.idComment]}
+                            autoFocus
+                          />
+                          <div className="fb-comment__edit-actions">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleEdit(comment.idComment, comment.content)}
+                              disabled={submittingEdit[comment.idComment]}
+                            >
+                              Hủy
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSubmitEdit(comment.idComment)}
+                              disabled={submittingEdit[comment.idComment] || !editInputs[comment.idComment]?.trim()}
+                              className="btn-primary"
+                            >
+                              {submittingEdit[comment.idComment] ? 'Đang lưu...' : 'Lưu'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        // View Mode
+                        <>
+                          <div className="fb-comment__bubble">
+                            <strong>
+                              {comment.userFirstName && comment.userLastName 
+                                ? `${comment.userFirstName} ${comment.userLastName}`.trim()
+                                : comment.userName || 'Người dùng'}
+                            </strong>
+                            <p>{comment.content}</p>
+                          </div>
+                          <div className="fb-comment__meta">
+                            <span>{formatCommentTime(comment.createdAt)}</span>
+                            <button type="button">Thích</button>
+                            <button 
+                              type="button"
+                              onClick={() => handleToggleReply(comment.idComment)}
+                            >
+                              Phản hồi
+                            </button>
+                            {currentUser?.id === comment.idUser && (
+                              <>
+                                <button 
+                                  type="button"
+                                  onClick={() => handleToggleEdit(comment.idComment, comment.content)}
+                                >
+                                  Sửa
+                                </button>
+                                <button 
+                                  type="button"
+                                  onClick={() => handleDeleteComment(comment.idComment)}
+                                >
+                                  Xóa
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                      
+                      {/* Reply Input */}
+                      {replyingTo === comment.idComment && (
+                        <div className="fb-reply-input">
+                          <img 
+                            src={currentUser?.avatar || '/default-avatar.png'} 
+                            alt="Your avatar" 
+                            className="fb-reply-input__avatar"
+                          />
+                          <div className="fb-reply-input__field-wrapper">
+                            <input
+                              type="text"
+                              placeholder="Viết phản hồi..."
+                              value={replyInputs[comment.idComment] || ''}
+                              onChange={(e) => setReplyInputs(prev => ({ ...prev, [comment.idComment]: e.target.value }))}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault();
+                                  handleSubmitReply(comment.idComment);
+                                }
+                              }}
+                              className="fb-reply-input__field"
+                              disabled={submittingReply[comment.idComment]}
+                            />
+                            {replyInputs[comment.idComment]?.trim() && (
+                              <button
+                                type="button"
+                                onClick={() => handleSubmitReply(comment.idComment)}
+                                disabled={submittingReply[comment.idComment]}
+                                className="fb-reply-input__submit"
+                              >
+                                {submittingReply[comment.idComment] ? '...' : '➤'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Replies */}
+                      {comment.replies && comment.replies.length > 0 && (
+                        <div className="fb-comment__replies">
+                          {comment.replies.map(reply => (
+                            <div key={reply.idComment} className="fb-comment fb-comment--reply">
+                              <img 
+                                src={reply.userAvatar || '/default-avatar.png'} 
+                                alt={`${reply.userFirstName} ${reply.userLastName}`}
+                                className="fb-comment__avatar"
+                              />
+                              <div className="fb-comment__content">
+                                {editingComment === reply.idComment ? (
+                                  // Edit Mode for Reply
+                                  <div className="fb-comment__edit">
+                                    <input
+                                      type="text"
+                                      value={editInputs[reply.idComment] || ''}
+                                      onChange={(e) => setEditInputs(prev => ({ ...prev, [reply.idComment]: e.target.value }))}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                          e.preventDefault();
+                                          handleSubmitEdit(reply.idComment);
+                                        } else if (e.key === 'Escape') {
+                                          handleToggleEdit(reply.idComment, reply.content);
+                                        }
+                                      }}
+                                      className="fb-comment__edit-field"
+                                      disabled={submittingEdit[reply.idComment]}
+                                      autoFocus
+                                    />
+                                    <div className="fb-comment__edit-actions">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleEdit(reply.idComment, reply.content)}
+                                        disabled={submittingEdit[reply.idComment]}
+                                      >
+                                        Hủy
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSubmitEdit(reply.idComment)}
+                                        disabled={submittingEdit[reply.idComment] || !editInputs[reply.idComment]?.trim()}
+                                        className="btn-primary"
+                                      >
+                                        {submittingEdit[reply.idComment] ? 'Đang lưu...' : 'Lưu'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  // View Mode for Reply
+                                  <>
+                                    <div className="fb-comment__bubble">
+                                      <strong>
+                                        {reply.userFirstName && reply.userLastName 
+                                          ? `${reply.userFirstName} ${reply.userLastName}`.trim()
+                                          : reply.userName || 'Người dùng'}
+                                      </strong>
+                                      <p>{reply.content}</p>
+                                    </div>
+                                    <div className="fb-comment__meta">
+                                      <span>{formatCommentTime(reply.createdAt)}</span>
+                                      <button type="button">Thích</button>
+                                      <button type="button">Phản hồi</button>
+                                      {currentUser?.id === reply.idUser && (
+                                        <>
+                                          <button 
+                                            type="button"
+                                            onClick={() => handleToggleEdit(reply.idComment, reply.content)}
+                                          >
+                                            Sửa
+                                          </button>
+                                          <button 
+                                            type="button"
+                                            onClick={() => handleDeleteComment(reply.idComment)}
+                                          >
+                                            Xóa
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="fb-comments-empty">Chưa có bình luận nào</div>
+            )}
           </div>
 
           <footer className="poster-detail-card__footer">

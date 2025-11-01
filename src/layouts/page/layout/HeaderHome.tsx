@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { logout } from '../../../api/user/loginApi';
 import useCurrentUser from '../../../hooks/useCurrentUser';
+import NotificationBell from '../../util/NotificationBell';
 
 const HeaderHome: React.FC = () => {
   const navigate = useNavigate();
@@ -69,7 +70,7 @@ const HeaderHome: React.FC = () => {
       <div className="fb-header__right">
         <button aria-label="Menu">☰</button>
         <NavLink to="/chat" aria-label="Tin nhắn">💬</NavLink>
-        <button aria-label="Thông báo">🔔</button>
+        <NotificationBell />
         {user ? (
           <div className="fb-header__user" ref={dropdownRef}>
             <button

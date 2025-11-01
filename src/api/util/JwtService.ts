@@ -1,4 +1,3 @@
-import { API_BASE_URL } from '../API_BASE_URL';
 export interface JwtPayload {
   id: string;
   sub: string; // username
@@ -105,4 +104,10 @@ export const getUserInfo = (): {
     lastName: payload.lastName,
     enabled: payload.enabled
   };
+};
+
+// Get just the user ID
+export const getUserId = (): string | null => {
+  const payload = getUserFromToken();
+  return payload?.id || null;
 };

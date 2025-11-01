@@ -203,6 +203,53 @@ label.create-poster__action-btn {
   cursor: not-allowed;
 }
 
+/* File input hidden */
+.create-poster__file-input-hidden {
+  display: none;
+}
+
+/* Emoji picker */
+.create-poster__emoji-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 16px;
+  background-color: #f7f8fa;
+  border: 1px solid #e4e6eb;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  max-width: 100%;
+}
+
+.create-poster__emoji {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: white;
+  border-radius: 6px;
+  font-size: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.create-poster__emoji:hover {
+  background-color: #e4e6eb;
+  transform: scale(1.1);
+}
+
+.create-poster__emoji:active {
+  transform: scale(0.95);
+}
+
+.create-poster__emoji-footer {
+  text-align: right;
+  margin-top: 6px;
+  width: 100%;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
   .create-poster {

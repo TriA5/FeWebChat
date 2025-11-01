@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { isLoggedIn, logout, getUserInfo } from '../../api/user/loginApi';
-import logo from '../../logo.svg';
+import React from 'react';
 import './Header.css';
-import { NavLink } from 'react-router-dom';
+import NotificationBell from '../util/NotificationBell';
 
 const Header: React.FC = () => {
 	// const [isUserLoggedIn, setIsUserLoggedIn] = useState(false);
@@ -42,10 +40,10 @@ const Header: React.FC = () => {
 			<nav className="header-nav">
 				<a href="/" className="header-link">Trang chủ</a>
 				 
-					<>
-						<a href="/login" className="header-link">Đăng nhập</a>
-						<a href="/register" className="header-link">Đăng ký</a>
-					</>
+				<>
+					<a href="/login" className="header-link">Đăng nhập</a>
+					<a href="/register" className="header-link">Đăng ký</a>
+				</>
 				
 			</nav>
 		</header>

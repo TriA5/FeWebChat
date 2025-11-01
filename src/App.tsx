@@ -1,5 +1,4 @@
 import React from "react";
-import logo from "./logo.svg";
 import "./App.css";
 import { Outlet, Route, Routes } from "react-router-dom";
 import RegisterPage from "./layouts/user/RegisterPage";
@@ -19,6 +18,7 @@ import EditPoster from "./layouts/TrangChu/EditPoster";
 import RequireAuth from "./components/RequireAuth";
 import HeaderHome from "./layouts/page/layout/HeaderHome";
 import GeminiChat from "./layouts/gemini/GeminiChat";
+import NotificationPage from "./layouts/util/NotificationPage";
 
 const PublicLayout: React.FC = () => {
   return (
@@ -85,6 +85,14 @@ function App() {
             element={
               <RequireAuth>
                 <EditPoster />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <RequireAuth>
+                <NotificationPage />
               </RequireAuth>
             }
           />
