@@ -567,7 +567,7 @@ const PosterDetail: React.FC = () => {
               </div>
             </div>
             
-            {isOwner && (
+            {/* {isOwner && (
               <div className="poster-detail-card__actions">
                 <button 
                   onClick={handleEdit} 
@@ -585,7 +585,7 @@ const PosterDetail: React.FC = () => {
                   {deleting ? '⏳' : '🗑️'}
                 </button>
               </div>
-            )}
+            )} */}
           </header>
 
           <div className="poster-detail-card__content">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, NavLink, useNavigate } from 'react-router-dom';
 import { connect as wsConnect, subscribe as wsSubscribe } from '../../api/websocket/stompClient';
 import { ensureConversation } from '../../api/chat/chatApi';
 import { 
@@ -450,6 +450,9 @@ const Friendship: React.FC = () => {
                 <div className="friends-grid">
                   {friends.map(friend => (
                     <article key={friend.id} className="friend-card">
+                      <NavLink to={`/user/${friend.id}`} className="result-card__author"
+                                   style={{ textDecoration: 'none', color: 'inherit' }}
+                                    >
                       <div className="friend-card__avatar" aria-hidden="true">
                         {friend.avatar ? (
                           <img src={friend.avatar} alt={friend.username} />
@@ -461,6 +464,7 @@ const Friendship: React.FC = () => {
                         )}
                         <span className={`status-dot status-dot--${friend.status}`} />
                       </div>
+                      </NavLink>
                       <div className="friend-card__body">
                         <h3>{`${friend.firstName} ${friend.lastName}`.trim()}</h3>
                         <span className="friend-card__username">{friend.username}</span>
@@ -502,6 +506,9 @@ const Friendship: React.FC = () => {
                 <div className="requests-grid">
                   {friendRequests.map(request => (
                     <article key={request.id} className="request-card">
+                      <NavLink to={`/user/${request.userId}`} className="result-card__author"
+                                   style={{ textDecoration: 'none', color: 'inherit' }}
+                                    >
                       <div className="request-card__avatar" aria-hidden="true">
                         {request.avatar ? (
                           <img src={request.avatar} alt={request.username} />
@@ -512,6 +519,7 @@ const Friendship: React.FC = () => {
                           </span>
                         )}
                       </div>
+                      </NavLink>
                       <div className="request-card__body">
                         <h3>{`${request.firstName} ${request.lastName}`.trim()}</h3>
                         <span className="request-card__username">{request.username}</span>
@@ -575,9 +583,14 @@ const Friendship: React.FC = () => {
                     <div className="results-grid">
                       {searchResults.map(user => (
                         <article key={user.id} className="result-card">
+                          <NavLink to={`/user/${user.id}`} className="result-card__author"
+                                   style={{ textDecoration: 'none', color: 'inherit' }}
+                                    >
                           <div className="result-card__avatar" aria-hidden="true">
                             {user.avatar ? (
-                              <img src={user.avatar} alt={`${user.firstName} ${user.lastName}`} />
+                              
+                                <img src={user.avatar} alt={`${user.firstName} ${user.lastName}`} />
+                              
                             ) : (
                               <span>
                                 {(user.firstName?.charAt(0) || '').toUpperCase()}
@@ -585,6 +598,7 @@ const Friendship: React.FC = () => {
                               </span>
                             )}
                           </div>
+                          </NavLink>
                           <div className="result-card__body">
                             <h3>{`${user.firstName} ${user.lastName}`.trim()}</h3>
                             <span className="result-card__meta">{formatPhoneNumber(user.phoneNumber)}</span>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import './Home.css';
 import { getVisiblePosters, deletePoster } from '../../api/poster/posterApi';
 import { getUserInfo } from '../../api/user/loginApi';
@@ -943,7 +943,9 @@ const Home: React.FC = () => {
 						posts.map(post => (
 							<article key={post.id} className="fb-post">
 								<header className="fb-post__header">
-									<img src={post.authorAvatar} alt={`Ảnh đại diện của ${post.authorName}`} />
+									<NavLink to={`/user/${post.authorId}`} className="fb-post__author">
+										<img src={post.authorAvatar} alt={`Ảnh đại diện của ${post.authorName}`} />
+									</NavLink>
 									<div>
 										<strong>{post.authorName}</strong>
 										<div className="fb-post__meta">
@@ -1079,11 +1081,13 @@ const Home: React.FC = () => {
 												<div className="fb-comments-list">
 													{comments[post.id].map(comment => (
 														<div key={comment.idComment} className="fb-comment">
+															<NavLink to={`/user/${comment.idUser}`} className="fb-post__author">
 															<img 
 																src={comment.userAvatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80'} 
 																alt={`${comment.userFirstName} ${comment.userLastName}`}
 																className="fb-comment__avatar"
 															/>
+															</NavLink>
 															<div className="fb-comment__content">
 																{editingComment[comment.idComment] ? (
 																	// Edit Mode
@@ -1165,11 +1169,13 @@ const Home: React.FC = () => {
 																{/* Reply Input */}
 																{replyingTo[comment.idComment] && (
 																	<div className="fb-reply-input">
+																		
 																		<img 
 																			src={currentUserRef.current?.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80'} 
 																			alt="Your avatar" 
 																			className="fb-reply-input__avatar"
 																		/>
+																		
 																		<div className="fb-reply-input__field-wrapper">
 																			<input
 																				type="text"
@@ -1204,11 +1210,13 @@ const Home: React.FC = () => {
 																	<div className="fb-comment__replies">
 																		{comment.replies.map(reply => (
 																			<div key={reply.idComment} className="fb-comment fb-comment--reply">
+																				<NavLink to={`/user/${reply.idUser}`} className="fb-post__author">
 																				<img 
 																					src={reply.userAvatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80'} 
 																					alt={`${reply.userFirstName} ${reply.userLastName}`}
 																					className="fb-comment__avatar"
 																				/>
+																				</NavLink>
 																				<div className="fb-comment__content">
 																					{editingComment[reply.idComment] ? (
 																						// Edit Mode for Reply
