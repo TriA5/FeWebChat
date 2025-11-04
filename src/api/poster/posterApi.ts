@@ -68,10 +68,40 @@ export const createPoster = async (posterData: {
   imageUrls?: string[];
 }): Promise<any> => {
   try {
+    console.log('🌐 API Call - POST /api/posters');
+    console.log('📍 URL:', `${API_BASE_URL}/posters`);
+    console.log('📦 Request payload:', {
+      idUser: posterData.idUser,
+      content: posterData.content.substring(0, 100) + (posterData.content.length > 100 ? '...' : ''),
+      privacyStatusName: posterData.privacyStatusName,
+      imageUrlsCount: posterData.imageUrls?.length || 0,
+      payloadSize: JSON.stringify(posterData).length + ' bytes'
+    });
+    
     const response = await axios.post(`${API_BASE_URL}/posters`, posterData);
+    
+    console.log('✅ Response status:', response.status);
+    console.log('✅ Response data:', response.data);
+    
     return response.data;
-  } catch (error) {
-    console.error('Error creating poster:', error);
+  } catch (error: any) {
+    console.error('❌ Error creating poster:');
+    console.error('  Status:', error.response?.status);
+    console.error('  Status Text:', error.response?.statusText);
+    console.error('  Response Data:', error.response?.data);
+    console.error('  Request URL:', error.config?.url);
+    console.error('  Request Method:', error.config?.method);
+    console.error('  Request Headers:', error.config?.headers);
+    
+    // Log detailed error message
+    if (error.response?.data) {
+      console.error('  Backend Error Message:', 
+        typeof error.response.data === 'string' 
+          ? error.response.data 
+          : JSON.stringify(error.response.data, null, 2)
+      );
+    }
+    
     throw error;
   }
 };

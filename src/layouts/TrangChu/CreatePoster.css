@@ -112,10 +112,15 @@
   overflow: hidden;
 }
 
-.create-poster__preview img {
+.create-poster__preview img,
+.create-poster__preview-video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.create-poster__preview-video {
+  display: block;
 }
 
 .create-poster__remove {

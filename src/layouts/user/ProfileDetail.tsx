@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import axios from "axios"; // still used for initial fetch only
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, NavLink } from "react-router-dom";
 import {
   Mail,
   Phone,
@@ -87,6 +87,11 @@ const ProfileDetail: React.FC = () => {
   // Posters for profile
   const [posters, setPosters] = useState<PosterDTO[]>([]);
   const [postersLoading, setPostersLoading] = useState(true);
+  const [posterPage, setPosterPage] = useState(0);
+  const [hasMorePosters, setHasMorePosters] = useState(true);
+  const [loadingMorePosters, setLoadingMorePosters] = useState(false);
+  const posterObserverRef = useRef<IntersectionObserver | null>(null);
+  const lastPosterRef = useRef<HTMLDivElement | null>(null);
   
   // Image viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -115,6 +120,9 @@ const ProfileDetail: React.FC = () => {
   const [editingComment, setEditingComment] = useState<Record<string, string>>({}); // commentId -> postId
   const [editInputs, setEditInputs] = useState<Record<string, string>>({}); // commentId -> content
   const [submittingEdit, setSubmittingEdit] = useState<Record<string, boolean>>({}); // commentId -> loading
+  
+  // Nested replies expand/collapse state
+  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({}); // commentId -> expanded
   
   // Post menu state
   const [showPostMenu, setShowPostMenu] = useState<Record<string, boolean>>({}); // postId -> boolean
@@ -449,10 +457,15 @@ const ProfileDetail: React.FC = () => {
   };
 
   // Fetch posters for this profile
-  useEffect(() => {
-    const fetchPosters = async () => {
-      if (!id) return;
-      setPostersLoading(true);
+  const fetchPosters = useCallback(async (pageNum: number = 0) => {
+    if (!id) return;
+      
+      if (pageNum === 0) {
+        setPostersLoading(true);
+      } else {
+        setLoadingMorePosters(true);
+      }
+      
       try {
         const currentUser = getUserInfo();
         currentUserRef.current = currentUser;
@@ -483,14 +496,29 @@ const ProfileDetail: React.FC = () => {
             filteredPosters = filteredPosters.filter(p => p.privacyStatusName === 'PUBLIC');
           }
         }
-        setPosters(filteredPosters);
         
-        // Fetch like counts for all posts
+        // Paginate
+        const PAGE_SIZE = 5;
+        const start = pageNum * PAGE_SIZE;
+        const end = start + PAGE_SIZE;
+        const paginatedPosters = filteredPosters.slice(start, end);
+        
+        if (paginatedPosters.length < PAGE_SIZE) {
+          setHasMorePosters(false);
+        }
+        
+        if (pageNum === 0) {
+          setPosters(paginatedPosters);
+        } else {
+          setPosters(prev => [...prev, ...paginatedPosters]);
+        }
+        
+        // Fetch like counts for paginated posts
         const likeCountsData: Record<string, number> = {};
         const userLikedData: Record<string, boolean> = {};
         
         await Promise.all(
-          filteredPosters.map(async (poster) => {
+          paginatedPosters.map(async (poster) => {
             try {
               const count = await getTotalLikes(poster.idPoster);
               likeCountsData[poster.idPoster] = count;
@@ -507,13 +535,18 @@ const ProfileDetail: React.FC = () => {
           })
         );
         
-        setLikeCounts(likeCountsData);
-        setUserLikedPosts(userLikedData);
+        if (pageNum === 0) {
+          setLikeCounts(likeCountsData);
+          setUserLikedPosts(userLikedData);
+        } else {
+          setLikeCounts(prev => ({ ...prev, ...likeCountsData }));
+          setUserLikedPosts(prev => ({ ...prev, ...userLikedData }));
+        }
         
-        // Fetch comment counts for all posts
+        // Fetch comment counts for paginated posts
         const commentCountsData: Record<string, number> = {};
         await Promise.all(
-          filteredPosters.map(async (poster) => {
+          paginatedPosters.map(async (poster) => {
             try {
               const postComments = await getCommentsByPosterId(poster.idPoster);
               const totalCount = countTotalComments(postComments);
@@ -525,16 +558,61 @@ const ProfileDetail: React.FC = () => {
           })
         );
         
-        setCommentCounts(commentCountsData);
+        if (pageNum === 0) {
+          setCommentCounts(commentCountsData);
+        } else {
+          setCommentCounts(prev => ({ ...prev, ...commentCountsData }));
+        }
       } catch (e) {
         console.error('Error fetching posters for profile:', e);
+        setHasMorePosters(false);
       } finally {
-        setPostersLoading(false);
+        if (pageNum === 0) {
+          setPostersLoading(false);
+        } else {
+          setLoadingMorePosters(false);
+        }
+      }
+  }, [id, isOwnProfile]);
+
+  // Initial load of posters
+  useEffect(() => {
+    fetchPosters(0);
+    setPosterPage(0);
+  }, [id, fetchPosters]);
+
+  // Intersection Observer for infinite scroll (posters)
+  useEffect(() => {
+    // Cleanup previous observer
+    if (posterObserverRef.current) {
+      posterObserverRef.current.disconnect();
+    }
+
+    // Create new observer
+    posterObserverRef.current = new IntersectionObserver(
+      (entries) => {
+        const firstEntry = entries[0];
+        if (firstEntry.isIntersecting && hasMorePosters && !loadingMorePosters && !postersLoading) {
+          console.log('📜 Loading more posters...');
+          const nextPage = posterPage + 1;
+          setPosterPage(nextPage);
+          fetchPosters(nextPage);
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    // Observe last poster element
+    if (lastPosterRef.current) {
+      posterObserverRef.current.observe(lastPosterRef.current);
+    }
+
+    return () => {
+      if (posterObserverRef.current) {
+        posterObserverRef.current.disconnect();
       }
     };
-
-    fetchPosters();
-  }, [id, isOwnProfile]);
+  }, [hasMorePosters, loadingMorePosters, postersLoading, posterPage, fetchPosters]);
 
   // Handler functions - copied from Home.tsx
   const handleDeletePost = async (postId: string, authorId: string) => {
@@ -723,6 +801,10 @@ const ProfileDetail: React.FC = () => {
     });
   };
 
+  const handleToggleNestedReplies = (commentId: string) => {
+    setExpandedReplies(prev => ({ ...prev, [commentId]: !prev[commentId] }));
+  };
+
   const handleSubmitReply = async (postId: string, parentCommentId: string) => {
     const currentUser = currentUserRef.current;
     if (!currentUser?.id) {
@@ -752,15 +834,19 @@ const ProfileDetail: React.FC = () => {
 
         setComments(prev => {
           const postComments = [...(prev[postId] || [])];
+          
+          // Find and update the exact parent comment recursively (maintain nested structure)
           const updateCommentReplies = (commentsList: Comment[]): Comment[] => {
             return commentsList.map(comment => {
               if (comment.idComment === parentCommentId) {
+                // Found the parent - add reply here
                 return {
                   ...comment,
                   replies: [enrichedReply, ...(comment.replies || [])],
                   replyCount: (comment.replyCount || 0) + 1
                 };
               } else if (comment.replies && comment.replies.length > 0) {
+                // Search in nested replies recursively
                 return {
                   ...comment,
                   replies: updateCommentReplies(comment.replies)
@@ -775,6 +861,9 @@ const ProfileDetail: React.FC = () => {
             [postId]: updateCommentReplies(postComments)
           };
         });
+        
+        // Auto-expand the parent comment to show the new reply
+        setExpandedReplies(prev => ({ ...prev, [parentCommentId]: true }));
 
         setCommentCounts(prev => ({
           ...prev,
@@ -918,6 +1007,163 @@ const ProfileDetail: React.FC = () => {
       console.error('❌ Error deleting comment:', error);
       alert('Có lỗi xảy ra khi xóa bình luận.');
     }
+  };
+
+  // Render nested replies recursively
+  const renderReply = (reply: Comment, postId: string, depth: number = 1) => {
+    const hasNestedReplies = reply.replies && reply.replies.length > 0;
+    const isExpanded = expandedReplies[reply.idComment];
+    const maxDepth = 3; // Limit nesting depth for UI
+    
+    return (
+      <div key={reply.idComment} className={`fb-comment__reply-wrapper fb-comment__reply--depth-${depth}`}>
+        <div className="fb-comment fb-comment--reply">
+        <NavLink to={`/user/${reply.idUser}`} className="fb-post__author">
+          <img 
+            src={reply.userAvatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80'} 
+            alt={`${reply.userFirstName} ${reply.userLastName}`}
+            className="fb-comment__avatar"
+          />
+        </NavLink>
+        <div className="fb-comment__content">
+          {editingComment[reply.idComment] ? (
+            // Edit Mode
+            <div className="fb-comment__edit">
+              <input
+                type="text"
+                value={editInputs[reply.idComment] || ''}
+                onChange={(e) => setEditInputs(prev => ({ ...prev, [reply.idComment]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmitEdit(postId, reply.idComment);
+                  } else if (e.key === 'Escape') {
+                    handleToggleEdit(reply.idComment, postId, reply.content);
+                  }
+                }}
+                className="fb-comment__edit-field"
+                disabled={submittingEdit[reply.idComment]}
+                autoFocus
+              />
+              <div className="fb-comment__edit-actions">
+                <button
+                  type="button"
+                  onClick={() => handleToggleEdit(reply.idComment, postId, reply.content)}
+                  disabled={submittingEdit[reply.idComment]}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSubmitEdit(postId, reply.idComment)}
+                  disabled={submittingEdit[reply.idComment] || !editInputs[reply.idComment]?.trim()}
+                  className="btn-primary"
+                >
+                  {submittingEdit[reply.idComment] ? 'Đang lưu...' : 'Lưu'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            // View Mode
+            <>
+              <div className="fb-comment__bubble">
+                <strong>
+                  <NavLink to={`/user/${reply.idUser}`}>
+                    {reply.userFirstName} {reply.userLastName}
+                  </NavLink>
+                </strong>
+                <p>{reply.content}</p>
+              </div>
+              <div className="fb-comment__actions">
+                <button type="button">Thích</button>
+                <button 
+                  type="button" 
+                  onClick={() => handleToggleReply(reply.idComment, postId)}
+                >
+                  Phản hồi
+                </button>
+                {currentUserRef.current?.id === reply.idUser && (
+                  <>
+                    <button 
+                      type="button" 
+                      onClick={() => handleToggleEdit(reply.idComment, postId, reply.content)}
+                    >
+                      Chỉnh sửa
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => handleDeleteComment(postId, reply.idComment)}
+                    >
+                      Xóa
+                    </button>
+                  </>
+                )}
+                <time>{new Date(reply.createdAt).toLocaleDateString('vi-VN')}</time>
+                {reply.updatedAt && new Date(reply.updatedAt).getTime() !== new Date(reply.createdAt).getTime() && (
+                  <span className="fb-comment__edited"> • Đã chỉnh sửa</span>
+                )}
+              </div>
+              
+              {/* Show nested replies toggle button */}
+              {hasNestedReplies && depth < maxDepth && (
+                <button 
+                  type="button"
+                  className="fb-comment__view-replies"
+                  onClick={() => handleToggleNestedReplies(reply.idComment)}
+                >
+                  {isExpanded ? '▼' : '▶'} {reply.replyCount || reply.replies!.length} phản hồi
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+        
+      {/* Reply Input - Outside fb-comment div, sibling */}
+      {replyingTo[reply.idComment] && (
+        <div className="fb-reply-input">
+          <img 
+            src={currentUserRef.current?.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80'} 
+            alt="Your avatar" 
+            className="fb-reply-input__avatar"
+          />
+          <div className="fb-reply-input__field-wrapper">
+            <input
+              type="text"
+              placeholder="Viết phản hồi..."
+              value={replyInputs[reply.idComment] || ''}
+              onChange={(e) => setReplyInputs(prev => ({ ...prev, [reply.idComment]: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmitReply(postId, reply.idComment);
+                }
+              }}
+              className="fb-reply-input__field"
+              disabled={submittingReply[reply.idComment]}
+            />
+            {replyInputs[reply.idComment]?.trim() && (
+              <button
+                type="button"
+                onClick={() => handleSubmitReply(postId, reply.idComment)}
+                disabled={submittingReply[reply.idComment]}
+                className="fb-reply-input__submit"
+              >
+                {submittingReply[reply.idComment] ? '...' : '➤'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Nested Replies - Outside fb-comment div, sibling */}
+      {hasNestedReplies && isExpanded && depth < maxDepth && (
+        <div className="fb-comment__replies">
+          {reply.replies!.map(nestedReply => renderReply(nestedReply, postId, depth + 1))}
+        </div>
+      )}
+    </div>
+    );
   };
 
   // Image viewer handlers
@@ -1346,7 +1592,7 @@ const ProfileDetail: React.FC = () => {
             ) : posters.length === 0 ? (
               <div className="empty-state">Chưa có bài viết nào.</div>
             ) : (
-              posters.map(poster => {
+              posters.map((poster, index) => {
                 const postId = poster.idPoster;
                 const getFullName = () => {
                   if (poster.userFirstName && poster.userLastName) {
@@ -1377,7 +1623,11 @@ const ProfileDetail: React.FC = () => {
                 };
 
                 return (
-                  <article key={postId} className="fb-post">
+                  <article 
+                    key={postId} 
+                    className="fb-post"
+                    ref={index === posters.length - 1 ? lastPosterRef : null}
+                  >
                     <header className="fb-post__header">
                       <img 
                         src={poster.userAvatar || user?.avatar || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQQEjGbsTwEJ2n8tZOeJWLkCivjuYDJBxQbIg&s'} 
@@ -1438,22 +1688,43 @@ const ProfileDetail: React.FC = () => {
                     {poster.imageUrls && poster.imageUrls.length > 0 && (
                       <figure className="fb-post__image">
                         {poster.imageUrls.length === 1 ? (
-                          <img 
-                            src={poster.imageUrls[0]} 
-                            alt={`Ảnh của ${getFullName()}`}
-                            onClick={() => openImageViewer(poster.imageUrls!, 0)}
-                            className="clickable-image"
-                          />
+                          poster.imageUrls[0].startsWith('data:video/') ? (
+                            <video 
+                              src={poster.imageUrls[0]} 
+                              controls
+                              className="fb-post__video"
+                            >
+                              Your browser does not support video.
+                            </video>
+                          ) : (
+                            <img 
+                              src={poster.imageUrls[0]} 
+                              alt={`Ảnh của ${getFullName()}`}
+                              onClick={() => openImageViewer(poster.imageUrls!, 0)}
+                              className="clickable-image"
+                            />
+                          )
                         ) : (
                           <div className={`fb-post__image-grid ${poster.imageUrls.length === 2 ? 'fb-post__image-grid--two' : ''}`}>
-                            {poster.imageUrls.slice(0, 4).map((img, idx) => (
-                              <img 
-                                key={idx} 
-                                src={img} 
-                                alt={`Ảnh ${idx + 1} của ${getFullName()}`}
-                                onClick={() => openImageViewer(poster.imageUrls!, idx)}
-                                className="clickable-image"
-                              />
+                            {poster.imageUrls.slice(0, 4).map((media, idx) => (
+                              media.startsWith('data:video/') ? (
+                                <video 
+                                  key={idx} 
+                                  src={media} 
+                                  controls
+                                  className="fb-post__video-grid"
+                                >
+                                  Your browser does not support video.
+                                </video>
+                              ) : (
+                                <img 
+                                  key={idx} 
+                                  src={media} 
+                                  alt={`Ảnh ${idx + 1} của ${getFullName()}`}
+                                  onClick={() => openImageViewer(poster.imageUrls!, idx)}
+                                  className="clickable-image"
+                                />
+                              )
                             ))}
                             {poster.imageUrls.length > 4 && (
                               <div 
@@ -1677,89 +1948,10 @@ const ProfileDetail: React.FC = () => {
                                       </div>
                                     )}
                                     
-                                    {/* Replies */}
+                                    {/* Replies - Recursive Nested Rendering */}
                                     {comment.replies && comment.replies.length > 0 && (
                                       <div className="fb-comment__replies">
-                                        {comment.replies.map(reply => (
-                                          <div key={reply.idComment} className="fb-comment fb-comment--reply">
-                                            <img 
-                                              src={reply.userAvatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80'} 
-                                              alt={`${reply.userFirstName} ${reply.userLastName}`}
-                                              className="fb-comment__avatar"
-                                            />
-                                            <div className="fb-comment__content">
-                                              {editingComment[reply.idComment] ? (
-                                                <div className="fb-comment__edit">
-                                                  <input
-                                                    type="text"
-                                                    value={editInputs[reply.idComment] || ''}
-                                                    onChange={(e) => setEditInputs(prev => ({ ...prev, [reply.idComment]: e.target.value }))}
-                                                    onKeyDown={(e) => {
-                                                      if (e.key === 'Enter' && !e.shiftKey) {
-                                                        e.preventDefault();
-                                                        handleSubmitEdit(postId, reply.idComment);
-                                                      } else if (e.key === 'Escape') {
-                                                        handleToggleEdit(reply.idComment, postId, reply.content);
-                                                      }
-                                                    }}
-                                                    className="fb-comment__edit-field"
-                                                    disabled={submittingEdit[reply.idComment]}
-                                                    autoFocus
-                                                  />
-                                                  <div className="fb-comment__edit-actions">
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => handleToggleEdit(reply.idComment, postId, reply.content)}
-                                                      disabled={submittingEdit[reply.idComment]}
-                                                    >
-                                                      Hủy
-                                                    </button>
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => handleSubmitEdit(postId, reply.idComment)}
-                                                      disabled={submittingEdit[reply.idComment] || !editInputs[reply.idComment]?.trim()}
-                                                      className="btn-primary"
-                                                    >
-                                                      {submittingEdit[reply.idComment] ? 'Đang lưu...' : 'Lưu'}
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              ) : (
-                                                <>
-                                                  <div className="fb-comment__bubble">
-                                                    <strong>
-                                                      {reply.userFirstName && reply.userLastName 
-                                                        ? `${reply.userFirstName} ${reply.userLastName}`.trim()
-                                                        : reply.userName || 'Người dùng'}
-                                                    </strong>
-                                                    <p>{reply.content}</p>
-                                                  </div>
-                                                  <div className="fb-comment__meta">
-                                                    <span>{formatCommentTime(reply.createdAt)}</span>
-                                                    <button type="button">Thích</button>
-                                                    <button type="button">Phản hồi</button>
-                                                    {currentUserRef.current?.id === reply.idUser && (
-                                                      <>
-                                                        <button 
-                                                          type="button"
-                                                          onClick={() => handleToggleEdit(reply.idComment, postId, reply.content)}
-                                                        >
-                                                          Sửa
-                                                        </button>
-                                                        <button 
-                                                          type="button"
-                                                          onClick={() => handleDeleteComment(postId, reply.idComment)}
-                                                        >
-                                                          Xóa
-                                                        </button>
-                                                      </>
-                                                    )}
-                                                  </div>
-                                                </>
-                                              )}
-                                            </div>
-                                          </div>
-                                        ))}
+                                        {comment.replies.map(reply => renderReply(reply, postId, 1))}
                                       </div>
                                     )}
                                   </div>
@@ -1775,6 +1967,21 @@ const ProfileDetail: React.FC = () => {
                   </article>
                 );
               })
+            )}
+            
+            {/* Loading More Indicator */}
+            {loadingMorePosters && (
+              <div className="fb-loading-more">
+                <div className="fb-spinner"></div>
+                <p>Đang tải thêm bài viết...</p>
+              </div>
+            )}
+            
+            {/* No More Posts */}
+            {!hasMorePosters && posters.length > 0 && (
+              <div className="fb-no-more-posts">
+                <p>Đã hiển thị tất cả bài viết</p>
+              </div>
             )}
           </div>
         </section>

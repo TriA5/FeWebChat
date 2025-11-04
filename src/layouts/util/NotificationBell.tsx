@@ -10,6 +10,7 @@ import {
   formatNotificationTime,
   getNotificationStyle
 } from '../../api/notification/notificationApi';
+import { getPosterIdFromCommentId } from '../../api/poster/commentApi';
 import { getUserId } from '../../api/util/JwtService';
 import './NotificationBell.css';
 
@@ -102,7 +103,34 @@ const NotificationBell: React.FC = () => {
 
     // Điều hướng đến nội dung liên quan
     setIsOpen(false);
-    navigate(`/poster/${notification.referenceId}`);
+    
+    try {
+      let posterId: string | null = null;
+
+      // LIKE_POSTER: referenceId là posterId
+      if (notification.notificationType === 'LIKE_POSTER') {
+        posterId = notification.referenceId;
+      } 
+      // COMMENT_POSTER, REPLY_COMMENT, LIKE_COMMENT: referenceId là commentId
+      else if (
+        notification.notificationType === 'COMMENT_POSTER' ||
+        notification.notificationType === 'REPLY_COMMENT' ||
+        notification.notificationType === 'LIKE_COMMENT'
+      ) {
+        // Lấy posterId từ commentId
+        posterId = await getPosterIdFromCommentId(notification.referenceId);
+      }
+
+      if (posterId) {
+        navigate(`/poster/${posterId}`);
+      } else {
+        console.error('Could not determine posterId from notification');
+        alert('Không thể tìm thấy bài viết liên quan');
+      }
+    } catch (error) {
+      console.error('Error navigating to poster:', error);
+      alert('Có lỗi khi mở bài viết');
+    }
   };
 
   const handleMarkAllAsRead = async () => {

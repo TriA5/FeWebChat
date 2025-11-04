@@ -59,6 +59,44 @@ export const getCommentsByPosterId = async (posterId: string): Promise<Comment[]
 };
 
 /**
+ * Get posterId from commentId by fetching comment details
+ * This is a helper function to navigate to poster from comment notification
+ * GET /api/comments/comment/{commentId}
+ */
+export const getPosterIdFromCommentId = async (commentId: string): Promise<string | null> => {
+  try {
+    const token = getToken();
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    // Backend endpoint: /api/comments/comment/{commentId}
+    const response = await fetch(
+      `${API_BASE_URL}/comments/comment/${encodeURIComponent(commentId)}`,
+      {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`Get comment by ID failed: HTTP ${response.status}`);
+      return null;
+    }
+
+    const comment: Comment = await response.json();
+    console.log(`✅ Got posterId ${comment.idPoster} from commentId ${commentId}`);
+    return comment.idPoster || null;
+  } catch (error) {
+    console.error('Error getting posterId from commentId:', error);
+    return null;
+  }
+};
+
+/**
  * Format comment time relative to now
  */
 export const formatCommentTime = (timestamp: string): string => {
