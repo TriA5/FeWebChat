@@ -1,6 +1,14 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../API_BASE_URL';
 
+// Interface cho Video
+export interface VideoDTO {
+  url: string;
+  thumbnailUrl?: string;
+  duration?: number;
+  fileSize?: number;
+}
+
 // Interface cho Poster
 export interface PosterDTO {
   idPoster: string;
@@ -14,6 +22,7 @@ export interface PosterDTO {
   userAvatar?: string;
   privacyStatusName: string;
   imageUrls?: string[];
+  videos?: VideoDTO[];
 }
 
 // Lấy tất cả posters
@@ -66,6 +75,7 @@ export const createPoster = async (posterData: {
   content: string;
   privacyStatusName: string;
   imageUrls?: string[];
+  videoUrls?: string[];
 }): Promise<any> => {
   try {
     console.log('🌐 API Call - POST /api/posters');
@@ -75,6 +85,7 @@ export const createPoster = async (posterData: {
       content: posterData.content.substring(0, 100) + (posterData.content.length > 100 ? '...' : ''),
       privacyStatusName: posterData.privacyStatusName,
       imageUrlsCount: posterData.imageUrls?.length || 0,
+      videoUrlsCount: posterData.videoUrls?.length || 0,
       payloadSize: JSON.stringify(posterData).length + ' bytes'
     });
     
@@ -114,6 +125,7 @@ export const updatePoster = async (
     content?: string;
     privacyStatusName?: string;
     imageUrls?: string[];
+    videoUrls?: string[];
   }
 ): Promise<any> => {
   try {

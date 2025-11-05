@@ -176,6 +176,43 @@ const CreatePoster: React.FC = () => {
 
 	return (
 		<div className="create-poster">
+			{/* Loading Overlay khi đang đăng */}
+			{loading && (
+				<div style={{
+					position: 'fixed',
+					top: 0,
+					left: 0,
+					right: 0,
+					bottom: 0,
+					backgroundColor: 'rgba(0, 0, 0, 0.7)',
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+					zIndex: 9999
+				}}>
+					<div style={{
+						backgroundColor: 'white',
+						padding: '30px',
+						borderRadius: '12px',
+						textAlign: 'center',
+						boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+					}}>
+						<div className="spinner" style={{
+							border: '4px solid #f3f3f3',
+							borderTop: '4px solid #1877f2',
+							borderRadius: '50%',
+							width: '50px',
+							height: '50px',
+							animation: 'spin 1s linear infinite',
+							margin: '0 auto 15px'
+						}}></div>
+						<p style={{ color: '#333', fontWeight: 'bold', fontSize: '16px' }}>
+							📤 Đang đăng bài viết...
+						</p>
+					</div>
+				</div>
+			)}
+
 			<div className="create-poster__container">
 				<div className="create-poster__header">
 					<button 

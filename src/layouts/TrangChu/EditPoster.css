@@ -130,10 +130,16 @@
 	background: #f0f2f5;
 }
 
-.edit-poster__preview-item img {
+.edit-poster__preview-item img,
+.edit-poster__preview-video {
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
+	display: block;
+}
+
+.edit-poster__preview-video {
+	background: #000;
 }
 
 .edit-poster__remove-btn {

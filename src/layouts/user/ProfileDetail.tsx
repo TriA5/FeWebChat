@@ -132,6 +132,9 @@ const ProfileDetail: React.FC = () => {
   const [friendshipLoading, setFriendshipLoading] = useState(false);
   const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
   
+  // Delete/Edit state
+  const [deletingPost, setDeletingPost] = useState<Record<string, boolean>>({});
+  
   const currentUserRef = useRef<any>(null);
 
   useEffect(() => {
@@ -620,6 +623,7 @@ const ProfileDetail: React.FC = () => {
       return;
     }
 
+    setDeletingPost(prev => ({ ...prev, [postId]: true }));
     try {
       await deletePoster(postId, authorId);
       // Remove from local state
@@ -628,6 +632,8 @@ const ProfileDetail: React.FC = () => {
     } catch (err: any) {
       console.error('Error deleting poster:', err);
       alert(err.response?.data?.message || 'Không thể xóa bài đăng');
+    } finally {
+      setDeletingPost(prev => ({ ...prev, [postId]: false }));
     }
   };
 
@@ -1627,7 +1633,37 @@ const ProfileDetail: React.FC = () => {
                     key={postId} 
                     className="fb-post"
                     ref={index === posters.length - 1 ? lastPosterRef : null}
+                    style={{ position: 'relative' }}
                   >
+                    {/* Loading overlay khi đang xóa */}
+                    {deletingPost[postId] && (
+                      <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10,
+                        borderRadius: '8px'
+                      }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <div className="spinner" style={{
+                            border: '4px solid #f3f3f3',
+                            borderTop: '4px solid #3498db',
+                            borderRadius: '50%',
+                            width: '40px',
+                            height: '40px',
+                            animation: 'spin 1s linear infinite',
+                            margin: '0 auto 10px'
+                          }}></div>
+                          <p style={{ color: '#333', fontWeight: 'bold' }}>Đang xóa bài viết...</p>
+                        </div>
+                      </div>
+                    )}
                     <header className="fb-post__header">
                       <img 
                         src={poster.userAvatar || user?.avatar || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQQEjGbsTwEJ2n8tZOeJWLkCivjuYDJBxQbIg&s'} 
@@ -1685,6 +1721,7 @@ const ProfileDetail: React.FC = () => {
 
                     <p className="fb-post__content">{poster.content}</p>
 
+                    {/* Render Images */}
                     {poster.imageUrls && poster.imageUrls.length > 0 && (
                       <figure className="fb-post__image">
                         {poster.imageUrls.length === 1 ? (
@@ -1736,6 +1773,23 @@ const ProfileDetail: React.FC = () => {
                             )}
                           </div>
                         )}
+                      </figure>
+                    )}
+
+                    {/* Render Videos from videos array */}
+                    {poster.videos && poster.videos.length > 0 && (
+                      <figure className="fb-post__image">
+                        {poster.videos.map((video, idx) => (
+                          <video 
+                            key={idx}
+                            src={video.url} 
+                            controls
+                            className="fb-post__video"
+                            poster={video.thumbnailUrl}
+                          >
+                            Your browser does not support video.
+                          </video>
+                        ))}
                       </figure>
                     )}
 

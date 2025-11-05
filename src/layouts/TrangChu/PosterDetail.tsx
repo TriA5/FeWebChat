@@ -757,6 +757,7 @@ const PosterDetail: React.FC = () => {
             <p>{poster.content}</p>
           </div>
 
+          {/* Render Images */}
           {poster.imageUrls && poster.imageUrls.length > 0 && (
             <div className="poster-detail-card__images">
               {poster.imageUrls.length === 1 ? (
@@ -804,6 +805,23 @@ const PosterDetail: React.FC = () => {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Render Videos from videos array */}
+          {poster.videos && poster.videos.length > 0 && (
+            <div className="poster-detail-card__images">
+              {poster.videos.map((video, idx) => (
+                <video
+                  key={idx}
+                  src={video.url}
+                  controls
+                  className="poster-detail-card__video-single"
+                  poster={video.thumbnailUrl}
+                >
+                  Your browser does not support video.
+                </video>
+              ))}
             </div>
           )}
 

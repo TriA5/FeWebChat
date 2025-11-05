@@ -18,6 +18,13 @@ interface Story {
 	isCreate?: boolean;
 }
 
+interface VideoDTO {
+	url: string;
+	thumbnailUrl?: string;
+	duration?: number;
+	fileSize?: number;
+}
+
 interface Post {
 	id: string; // UUID từ backend
 	authorId: string; // UUID của user
@@ -28,6 +35,7 @@ interface Post {
 	content: string;
 	image?: string;
 	images?: string[]; // Thêm để support nhiều ảnh
+	videos?: VideoDTO[]; // Thêm để support video
 	reactions: number;
 	comments: number;
 	shares: number;
@@ -111,6 +119,9 @@ const Home: React.FC = () => {
 	const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 	const [submittingComment, setSubmittingComment] = useState<Record<string, boolean>>({});
 	
+	// Delete/Edit state
+	const [deletingPost, setDeletingPost] = useState<Record<string, boolean>>({});
+	
 	// Reply state
 	const [replyingTo, setReplyingTo] = useState<Record<string, string>>({}); // commentId -> postId
 	const [replyInputs, setReplyInputs] = useState<Record<string, string>>({}); // commentId -> content
@@ -172,6 +183,7 @@ const Home: React.FC = () => {
 			content: poster.content,
 			images: poster.imageUrls && poster.imageUrls.length > 0 ? poster.imageUrls : undefined,
 			image: poster.imageUrls && poster.imageUrls.length > 0 ? poster.imageUrls[0] : undefined,
+			videos: poster.videos, // Map videos array từ backend
 			reactions: 0,
 			comments: 0,
 			shares: 0
@@ -216,9 +228,17 @@ const Home: React.FC = () => {
 			}
 			
 			// Chuyển đổi PosterDTO sang Post
-			const convertedPosts: Post[] = paginatedPosters.map((poster, index) => 
-				convertPosterToPost(poster, index)
-			);
+			const convertedPosts: Post[] = paginatedPosters.map((poster, index) => {
+				const post = convertPosterToPost(poster, index);
+				if (poster.videos && poster.videos.length > 0) {
+					console.log('🎥 Poster with videos:', {
+						posterId: poster.idPoster,
+						videos: poster.videos,
+						convertedPost: post
+					});
+				}
+				return post;
+			});
 
 			if (pageNum === 0) {
 				setPosts(convertedPosts);
@@ -459,6 +479,7 @@ const Home: React.FC = () => {
 			return;
 		}
 
+		setDeletingPost(prev => ({ ...prev, [postId]: true }));
 		try {
 			await deletePoster(postId, authorId);
 			// WebSocket will handle removing from feed
@@ -466,6 +487,8 @@ const Home: React.FC = () => {
 		} catch (err: any) {
 			console.error('Error deleting poster:', err);
 			alert(err.response?.data?.message || 'Không thể xóa bài đăng');
+		} finally {
+			setDeletingPost(prev => ({ ...prev, [postId]: false }));
 		}
 	};
 
@@ -1192,7 +1215,37 @@ const Home: React.FC = () => {
 								key={post.id} 
 								className="fb-post"
 								ref={index === posts.length - 1 ? lastPostRef : null}
+								style={{ position: 'relative' }}
 							>
+								{/* Loading overlay khi đang xóa */}
+								{deletingPost[post.id] && (
+									<div style={{
+										position: 'absolute',
+										top: 0,
+										left: 0,
+										right: 0,
+										bottom: 0,
+										backgroundColor: 'rgba(255, 255, 255, 0.8)',
+										display: 'flex',
+										alignItems: 'center',
+										justifyContent: 'center',
+										zIndex: 10,
+										borderRadius: '8px'
+									}}>
+										<div style={{ textAlign: 'center' }}>
+											<div className="spinner" style={{
+												border: '4px solid #f3f3f3',
+												borderTop: '4px solid #3498db',
+												borderRadius: '50%',
+												width: '40px',
+												height: '40px',
+												animation: 'spin 1s linear infinite',
+												margin: '0 auto 10px'
+											}}></div>
+											<p style={{ color: '#333', fontWeight: 'bold' }}>Đang xóa bài viết...</p>
+										</div>
+									</div>
+								)}
 								<header className="fb-post__header">
 									<NavLink to={`/user/${post.authorId}`} className="fb-post__author">
 										<img src={post.authorAvatar} alt={`Ảnh đại diện của ${post.authorName}`} />
@@ -1267,19 +1320,47 @@ const Home: React.FC = () => {
 							)}
 
 							{/* Render Videos from videos array */}
-							{(post as any).videos && (post as any).videos.length > 0 && (
+							{post.videos && post.videos.length > 0 && (
 								<figure className="fb-post__image">
-									{(post as any).videos.map((video: any, idx: number) => (
-										<video 
-											key={idx}
-											src={video.url} 
-											controls
-											className="fb-post__video"
-											poster={video.thumbnailUrl}
-										>
-											Your browser does not support video.
-										</video>
-									))}
+									{post.videos.map((video, idx) => {
+										// Debug logs
+										if (idx === 0) {
+											console.log('🎥 Rendering videos for post:', post.id, post.videos);
+										}
+										console.log('🎬 Video URL:', video.url);
+										
+										if (!video.url) {
+											console.error('❌ Video URL is empty!');
+											return null;
+										}
+										
+										return (
+											<div key={idx} className="fb-post__video-wrapper">
+												<video 
+													src={video.url} 
+													controls
+													controlsList="nodownload"
+													className="fb-post__video"
+													poster={video.thumbnailUrl}
+													preload="metadata"
+													onLoadStart={() => console.log('📹 Video loading started:', video.url)}
+													onCanPlay={() => console.log('✅ Video can play:', video.url)}
+													onError={(e) => {
+														console.error('❌ Video load error:', {
+															error: e,
+															url: video.url,
+															type: e.currentTarget?.error?.code,
+															message: e.currentTarget?.error?.message
+														});
+													}}
+												>
+													<source src={video.url} type="video/mp4" />
+													<source src={video.url} type="video/webm" />
+													Your browser does not support the video tag.
+												</video>
+											</div>
+										);
+									})}
 								</figure>
 							)}
 							<footer className="fb-post__footer">

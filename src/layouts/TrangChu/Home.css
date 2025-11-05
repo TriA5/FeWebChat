@@ -598,6 +598,25 @@
 
 .fb-post__video {
   display: block;
+  min-height: 300px;
+  background: #000;
+  border-radius: 8px;
+  width: 100%;
+}
+
+.fb-post__video-wrapper {
+  position: relative;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.fb-post__video::-webkit-media-controls {
+  display: flex !important;
+}
+
+.fb-post__video::-webkit-media-controls-panel {
+  display: flex !important;
 }
 
 .fb-post__image img:hover {

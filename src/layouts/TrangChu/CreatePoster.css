@@ -255,6 +255,12 @@ label.create-poster__action-btn {
   width: 100%;
 }
 
+/* Spinner animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
   .create-poster {

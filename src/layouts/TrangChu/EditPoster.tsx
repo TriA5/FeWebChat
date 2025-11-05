@@ -12,7 +12,10 @@ const EditPoster: React.FC = () => {
 	const [content, setContent] = useState('');
 	const [privacyStatus, setPrivacyStatus] = useState<'PUBLIC' | 'FRIENDS' | 'PRIVATE'>('PUBLIC');
 	const [images, setImages] = useState<string[]>([]);
+	const [videos, setVideos] = useState<string[]>([]);
 	const [previews, setPreviews] = useState<string[]>([]);
+	const [videoUrls, setVideoUrls] = useState<Array<{ url: string; thumbnailUrl?: string }>>([]);
+	const [fileTypes, setFileTypes] = useState<Array<'image' | 'video'>>([]);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState('');
@@ -44,9 +47,23 @@ const EditPoster: React.FC = () => {
 
 			setContent(poster.content);
 			setPrivacyStatus(poster.privacyStatusName as any);
-			if (poster.imageUrls) {
+			
+			// Load images
+			if (poster.imageUrls && poster.imageUrls.length > 0) {
 				setImages(poster.imageUrls);
 				setPreviews(poster.imageUrls);
+				setFileTypes(poster.imageUrls.map(() => 'image'));
+			}
+			
+			// Load videos
+			if (poster.videos && poster.videos.length > 0) {
+				console.log('📹 Loading videos for edit:', poster.videos);
+				setVideoUrls(poster.videos);
+				// Add videos to previews
+				const videoPreviewUrls = poster.videos.map(v => v.url);
+				setPreviews(prev => [...prev, ...videoPreviewUrls]);
+				const videoTypes = new Array(poster.videos.length).fill('video' as const);
+				setFileTypes(prev => [...prev, ...videoTypes]);
 			}
 		} catch (err: any) {
 			console.error('Error loading poster:', err);
@@ -97,10 +114,22 @@ const EditPoster: React.FC = () => {
 		}
 	};
 
-	// Remove image
+	// Remove image or video
 	const removeImage = (index: number) => {
-		setImages(prev => prev.filter((_, i) => i !== index));
+		const fileType = fileTypes[index];
+		
+		if (fileType === 'video') {
+			// Remove from videoUrls
+			const videoIndex = fileTypes.slice(0, index).filter(t => t === 'video').length;
+			setVideoUrls(prev => prev.filter((_, i) => i !== videoIndex));
+		} else {
+			// Remove from images
+			const imageIndex = fileTypes.slice(0, index).filter(t => t === 'image').length;
+			setImages(prev => prev.filter((_, i) => i !== imageIndex));
+		}
+		
 		setPreviews(prev => prev.filter((_, i) => i !== index));
+		setFileTypes(prev => prev.filter((_, i) => i !== index));
 	};
 
 	// Handle submit
@@ -121,12 +150,18 @@ const EditPoster: React.FC = () => {
 			setSaving(true);
 			setError('');
 
-			await updatePoster(posterId, {
+			// Prepare data - always include videoUrls
+			const updateData: any = {
 				idUser: currentUser.id,
 				content: content.trim(),
 				privacyStatusName: privacyStatus,
-				imageUrls: images
-			});
+				imageUrls: images.length > 0 ? images : [],
+				videoUrls: videoUrls.length > 0 ? videoUrls.map(v => v.url) : []
+			};
+
+			console.log('📤 Updating poster with data:', updateData);
+
+			await updatePoster(posterId, updateData);
 
 			alert('✅ Đã cập nhật bài viết thành công!');
 			navigate(`/poster/${posterId}`);
@@ -165,6 +200,43 @@ const EditPoster: React.FC = () => {
 
 	return (
 		<div className="edit-poster">
+			{/* Loading Overlay khi đang lưu */}
+			{saving && (
+				<div style={{
+					position: 'fixed',
+					top: 0,
+					left: 0,
+					right: 0,
+					bottom: 0,
+					backgroundColor: 'rgba(0, 0, 0, 0.7)',
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+					zIndex: 9999
+				}}>
+					<div style={{
+						backgroundColor: 'white',
+						padding: '30px',
+						borderRadius: '12px',
+						textAlign: 'center',
+						boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+					}}>
+						<div className="spinner" style={{
+							border: '4px solid #f3f3f3',
+							borderTop: '4px solid #1877f2',
+							borderRadius: '50%',
+							width: '50px',
+							height: '50px',
+							animation: 'spin 1s linear infinite',
+							margin: '0 auto 15px'
+						}}></div>
+						<p style={{ color: '#333', fontWeight: 'bold', fontSize: '16px' }}>
+							⏳ Đang lưu thay đổi...
+						</p>
+					</div>
+				</div>
+			)}
+
 			<div className="edit-poster__container">
 				<div className="edit-poster__header">
 					<button onClick={() => navigate(-1)} className="btn-back-icon">
@@ -205,17 +277,27 @@ const EditPoster: React.FC = () => {
 						rows={8}
 					/>
 
-					{/* Image Previews */}
+					{/* Image & Video Previews */}
 					{previews.length > 0 && (
 						<div className="edit-poster__previews">
 							{previews.map((preview, index) => (
 								<div key={index} className="edit-poster__preview-item">
-									<img src={preview} alt={`Preview ${index + 1}`} />
+									{fileTypes[index] === 'video' ? (
+										<video 
+											src={preview} 
+											controls 
+											className="edit-poster__preview-video"
+										>
+											Your browser does not support video.
+										</video>
+									) : (
+										<img src={preview} alt={`Preview ${index + 1}`} />
+									)}
 									<button
 										type="button"
 										onClick={() => removeImage(index)}
 										className="edit-poster__remove-btn"
-										title="Xóa ảnh"
+										title={fileTypes[index] === 'video' ? 'Xóa video' : 'Xóa ảnh'}
 									>
 										✕
 									</button>
