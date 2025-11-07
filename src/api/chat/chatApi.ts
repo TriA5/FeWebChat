@@ -62,6 +62,50 @@ export async function getMessages(conversationId: string): Promise<ChatMessageDT
   return res.json();
 }
 
+// Lấy tin nhắn với pagination (trang đầu tiên)
+export async function getMessagesPaginated(
+  conversationId: string, 
+  page: number = 0, 
+  size: number = 10
+): Promise<ChatMessageDTO[]> {
+  const token = getToken();
+  if (!token) throw new Error('No JWT token found');
+  const res = await fetch(
+    `${API_BASE_URL}/chats/${encodeURIComponent(conversationId)}/messages/paginated?page=${page}&size=${size}`,
+    {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    }
+  );
+  if (!res.ok) throw new Error(await res.text() || 'Failed to get messages');
+  return res.json();
+}
+
+// Load thêm tin nhắn cũ hơn (khi scroll lên)
+export async function getMessagesBefore(
+  conversationId: string,
+  timestamp: string,
+  size: number = 10
+): Promise<ChatMessageDTO[]> {
+  const token = getToken();
+  if (!token) throw new Error('No JWT token found');
+  const res = await fetch(
+    `${API_BASE_URL}/chats/${encodeURIComponent(conversationId)}/messages/before?timestamp=${encodeURIComponent(timestamp)}&size=${size}`,
+    {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    }
+  );
+  if (!res.ok) throw new Error(await res.text() || 'Failed to get messages');
+  return res.json();
+}
+
 export async function listConversations(userId: string): Promise<ConversationDTO[]> {
   const token = getToken();
   if (!token) throw new Error('No JWT token found');
@@ -110,6 +154,50 @@ export async function getGroupMessages(groupId: string): Promise<ChatMessageDTO[
       'Authorization': `Bearer ${token}`
     }
   });
+  if (!res.ok) throw new Error(await res.text() || 'Failed to get group messages');
+  return res.json();
+}
+
+// Lấy tin nhắn nhóm với pagination (trang đầu tiên)
+export async function getGroupMessagesPaginated(
+  groupId: string,
+  page: number = 0,
+  size: number = 10
+): Promise<ChatMessageDTO[]> {
+  const token = getToken();
+  if (!token) throw new Error('No JWT token found');
+  const res = await fetch(
+    `${API_BASE_URL}/groups/${encodeURIComponent(groupId)}/messages/paginated?page=${page}&size=${size}`,
+    {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    }
+  );
+  if (!res.ok) throw new Error(await res.text() || 'Failed to get group messages');
+  return res.json();
+}
+
+// Load thêm tin nhắn nhóm cũ hơn (khi scroll lên)
+export async function getGroupMessagesBefore(
+  groupId: string,
+  timestamp: string,
+  size: number = 10
+): Promise<ChatMessageDTO[]> {
+  const token = getToken();
+  if (!token) throw new Error('No JWT token found');
+  const res = await fetch(
+    `${API_BASE_URL}/groups/${encodeURIComponent(groupId)}/messages/before?timestamp=${encodeURIComponent(timestamp)}&size=${size}`,
+    {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    }
+  );
   if (!res.ok) throw new Error(await res.text() || 'Failed to get group messages');
   return res.json();
 }
@@ -266,4 +354,36 @@ export async function sendGroupFileMessage(groupId: string, senderId: string, fi
   }
   
   return res.json();
+}
+// Download file via backend proxy (for auth, CORS, and content-disposition)
+export async function downloadChatFile(fileUrl: string, fileName?: string): Promise<void> {
+  const token = getToken();
+  if (!token) throw new Error('No JWT token found');
+  const res = await fetch(`${API_BASE_URL}/chats/download-file?fileUrl=${encodeURIComponent(fileUrl)}`, {
+    method: 'GET',
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => 'Unknown server error');
+    throw new Error(text || 'Tải file thất bại');
+  }
+  const blob = await res.blob();
+  // Use provided fileName or try to extract from Content-Disposition
+  let downloadName = fileName;
+  const disposition = res.headers.get('Content-Disposition');
+  if (!downloadName && disposition) {
+    const match = disposition.match(/filename="?([^";]+)"?/);
+    if (match) downloadName = decodeURIComponent(match[1]);
+  }
+  if (!downloadName) downloadName = 'file';
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = downloadName;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+    a.remove();
+  }, 100);
 }

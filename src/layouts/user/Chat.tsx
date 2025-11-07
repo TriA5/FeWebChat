@@ -13,7 +13,10 @@ import {
   getGroupMembers,
   deleteGroup,
   sendImageMessage,
-  sendGroupImageMessage
+  sendGroupImageMessage,
+  downloadChatFile,
+  getMessagesPaginated,
+  getGroupMessagesPaginated
 } from '../../api/chat/chatApi';
 import { getFriendsList } from '../../api/user/friendshipApi';
 import { initiateCall, endCall, VideoCallDTO } from '../../api/videocall/videoCallApi';
@@ -124,6 +127,14 @@ const Chat: React.FC = () => {
     return localStorage.getItem('useFakeCamera') === 'true';
   });
   
+  // Track downloading files to prevent duplicate downloads
+  const [downloadingFiles, setDownloadingFiles] = useState<Record<string, boolean>>({});
+  
+  // Pagination states
+  const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [currentPage, setCurrentPage] = useState(0); // Track current page number
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -131,25 +142,44 @@ const Chat: React.FC = () => {
   const docFileInputRef = useRef<HTMLInputElement>(null); // For documents
   const videoFileInputRef = useRef<HTMLInputElement>(null); // For videos
   const callStartTimeRef = useRef<Date | null>(null);
+  const hasScrolledToBottomRef = useRef(false); // Track if user has scrolled to bottom initially
 
   const scrollToBottom = () => {
     if (messagesAreaRef.current) {
       messagesAreaRef.current.scrollTop = messagesAreaRef.current.scrollHeight;
+      hasScrolledToBottomRef.current = true; // Mark as scrolled to bottom
     }
   };
 
-  // Auto scroll to bottom when messages change
+  // Chỉ auto scroll khi có tin nhắn MỚI, không scroll khi load more tin nhắn cũ
+  const prevMessagesLengthRef = useRef(0);
   useEffect(() => {
-    scrollToBottom();
+    // Nếu tin nhắn được thêm vào CUỐI (tin nhắn mới), scroll xuống
+    // Nếu tin nhắn được thêm vào ĐẦU (load more), KHÔNG scroll
+    if (messages.length > 0) {
+      const isNewMessage = messages.length > prevMessagesLengthRef.current && 
+                           messages.length - prevMessagesLengthRef.current <= 5; // Chỉ scroll khi thêm <= 5 tin nhắn (tin nhắn mới realtime)
+      
+      if (isNewMessage) {
+        scrollToBottom();
+      }
+      
+      prevMessagesLengthRef.current = messages.length;
+    }
   }, [messages]);
 
   // Auto scroll when selecting a new chat room
   useEffect(() => {
     if (selectedChatRoom) {
-      // Small delay to ensure messages are loaded
-      setTimeout(() => {
+      // Reset pagination state khi chuyển room
+      setHasMoreMessages(true);
+      setCurrentPage(0); // Reset về trang 0
+      hasScrolledToBottomRef.current = false; // Reset scroll flag
+      
+      // Scroll xuống ngay lập tức không cần delay
+      requestAnimationFrame(() => {
         scrollToBottom();
-      }, 1);
+      });
     }
   }, [selectedChatRoom]);
 
@@ -194,7 +224,15 @@ const Chat: React.FC = () => {
       const me = getUserInfo();
       const myId = me?.id;
       const myName = me?.username || 'Tôi';
-      const msgs = room.type === 'group' ? await getGroupMessages(room.id) : await getMessagesApi(room.id);
+      
+      // Sử dụng pagination API - lấy 20 tin nhắn mới nhất
+      const msgs = room.type === 'group' 
+        ? await getGroupMessagesPaginated(room.id, 0, 20)
+        : await getMessagesPaginated(room.id, 0, 20);
+      
+      // Reset hasMore - nếu nhận được đủ 20 tin nhắn, có thể còn tin nhắn cũ hơn
+      setHasMoreMessages(msgs.length === 20);
+      
       // Collect unknown sender IDs to fetch
       const unknownIds = Array.from(new Set(
         msgs
@@ -251,8 +289,116 @@ const Chat: React.FC = () => {
     } catch (e) {
       console.error('Load messages failed', e);
       setMessages([]);
+      setHasMoreMessages(false);
     }
   }, [friendMap, userCache]);
+
+  // Load thêm tin nhắn cũ hơn khi scroll lên - Dùng page number
+  const loadMoreMessages = useCallback(async () => {
+    if (loadingMoreMessages || !hasMoreMessages || !selectedChatRoom) {
+      return;
+    }
+
+    // Lưu scroll position và scroll height trước khi load
+    const messagesArea = messagesAreaRef.current;
+    const scrollHeightBefore = messagesArea?.scrollHeight || 0;
+    const scrollTopBefore = messagesArea?.scrollTop || 0;
+
+    setLoadingMoreMessages(true);
+    try {
+      const me = getUserInfo();
+      const myId = me?.id;
+      const myName = me?.username || 'Tôi';
+      
+      // Tăng page number lên 1
+      const nextPage = currentPage + 1;
+      
+      console.log(`📜 Loading page ${nextPage} (size: 20)`);
+      
+      // Lấy trang tiếp theo
+      const olderMsgs = selectedChatRoom.type === 'group'
+        ? await getGroupMessagesPaginated(selectedChatRoom.id, nextPage, 20)
+        : await getMessagesPaginated(selectedChatRoom.id, nextPage, 20);
+      
+      // Nếu nhận được ít hơn 20 tin nhắn, không còn tin nhắn nữa
+      if (olderMsgs.length < 20) {
+        setHasMoreMessages(false);
+      }
+      
+      if (olderMsgs.length === 0) {
+        console.log('✅ Không còn tin nhắn cũ hơn');
+        setHasMoreMessages(false);
+        return;
+      }
+      
+      // Cập nhật page number
+      setCurrentPage(nextPage);
+      console.log(`✅ Page updated: ${currentPage} → ${nextPage}`);
+      
+      // Collect unknown sender IDs
+      const unknownIds = Array.from(new Set(
+        olderMsgs
+          .map(m => m.senderId)
+          .filter(id => id && id !== myId && !friendMap[id] && !userCache[id])
+      ));
+      
+      const additions: Record<string, { name: string; avatar?: string }> = {};
+      if (unknownIds.length) {
+        const results = await Promise.allSettled(unknownIds.map(id => getUserById(id)));
+        results.forEach((r, idx) => {
+          if (r.status === 'fulfilled' && r.value) {
+            const u = r.value;
+            const userName = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username || 'Người dùng';
+            additions[unknownIds[idx]] = { name: userName, avatar: u.avatar };
+          }
+        });
+        if (Object.keys(additions).length) {
+          setUserCache(prev => ({ ...prev, ...additions }));
+        }
+      }
+      
+      const combinedCache = { ...userCache, ...friendMap, ...additions };
+      
+      const transformed: Message[] = olderMsgs.map(m => {
+        const extra = combinedCache[m.senderId];
+        return {
+          id: m.id,
+          senderId: m.senderId,
+          senderName: m.senderId === myId ? myName : (extra?.name || 'Người dùng'),
+          senderAvatar: extra?.avatar,
+          content: m.content.startsWith('"') && m.content.endsWith('"') && m.content.length > 1 ? m.content.slice(1, -1) : m.content,
+          timestamp: new Date(m.createdAt),
+          type: (m.messageType?.toLowerCase() as 'text' | 'image' | 'file') || 'text',
+          imageUrl: m.imageUrl,
+          fileUrl: m.fileUrl,
+          fileName: m.fileName,
+          fileSize: m.fileSize,
+          isOwn: m.senderId === myId
+        };
+      });
+      
+      // Thêm tin nhắn cũ vào đầu danh sách
+      setMessages(prev => [...transformed, ...prev]);
+      
+      // Restore scroll position sau khi thêm tin nhắn cũ
+      requestAnimationFrame(() => {
+        if (messagesArea) {
+          const scrollHeightAfter = messagesArea.scrollHeight;
+          const scrollHeightDiff = scrollHeightAfter - scrollHeightBefore;
+          messagesArea.scrollTop = scrollTopBefore + scrollHeightDiff;
+          console.log(`📍 Restored scroll position: ${scrollTopBefore} + ${scrollHeightDiff} = ${messagesArea.scrollTop}`);
+        }
+      });
+      
+      console.log(`✅ Loaded ${transformed.length} messages from page ${nextPage}`);
+      
+    } catch (e) {
+      console.error('❌ Load more messages failed', e);
+      setHasMoreMessages(false);
+    } finally {
+      setLoadingMoreMessages(false);
+    }
+  }, [loadingMoreMessages, hasMoreMessages, selectedChatRoom, currentPage, friendMap, userCache]);
 
   // Initialize WebRTC service when currentUser is available
   useEffect(() => {
@@ -578,6 +724,29 @@ const Chat: React.FC = () => {
   const isVideoFile = (fileName?: string, fileUrl?: string) => {
     const str = (fileName || fileUrl || '').toLowerCase();
     return ['.mp4', '.webm', '.ogg', '.ogv', '.mov', '.mkv', '.m4v'].some(ext => str.endsWith(ext));
+  };
+
+  // Handle file download with loading state
+  const handleDownloadFile = async (fileUrl: string, fileName?: string) => {
+    const fileKey = fileUrl;
+    
+    // Prevent duplicate downloads
+    if (downloadingFiles[fileKey]) {
+      console.log('⏳ File đang được tải...');
+      return;
+    }
+    
+    try {
+      console.log('📥 Bắt đầu tải file:', fileUrl, fileName);
+      setDownloadingFiles(prev => ({ ...prev, [fileKey]: true }));
+      await downloadChatFile(fileUrl, fileName);
+      console.log('✅ Tải file thành công');
+    } catch (error: any) {
+      console.error('❌ Tải file thất bại:', error);
+      alert(error.message || 'Không thể tải file. Vui lòng thử lại.');
+    } finally {
+      setDownloadingFiles(prev => ({ ...prev, [fileKey]: false }));
+    }
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
@@ -1481,7 +1650,37 @@ const Chat: React.FC = () => {
             </div>
 
             {/* Messages Area */}
-            <div className="messages-area" ref={messagesAreaRef}>
+            <div 
+              className="messages-area" 
+              ref={messagesAreaRef}
+              onScroll={(e) => {
+                const target = e.currentTarget;
+                
+                // Detect if user has scrolled to bottom area (near bottom)
+                const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 100;
+                if (isNearBottom) {
+                  hasScrolledToBottomRef.current = true;
+                }
+                
+                // Chỉ load more khi: đã scroll xuống bottom ít nhất 1 lần + đang scroll gần đầu
+                if (
+                  hasScrolledToBottomRef.current && 
+                  target.scrollTop < 100 && 
+                  !loadingMoreMessages && 
+                  hasMoreMessages
+                ) {
+                  loadMoreMessages();
+                }
+              }}
+            >
+              <div style={{ flex: 1 }} /> {/* Spacer để đẩy messages xuống bottom */}
+              
+              {loadingMoreMessages && (
+                <div style={{ textAlign: 'center', padding: '10px', color: '#888' }}>
+                  ⏳ Đang tải thêm tin nhắn...
+                </div>
+              )}
+              
               {messages.map(message => (
                 <div
                   key={message.id}
@@ -1529,15 +1728,14 @@ const Chat: React.FC = () => {
                               {message.fileSize ? (message.fileSize / 1024).toFixed(2) + ' KB' : 'Unknown size'}
                             </div>
                           </div>
-                          <a 
-                            href={message.fileUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
+                          <button
+                            onClick={() => handleDownloadFile(message.fileUrl!, message.fileName)}
                             className="file-download-btn"
-                            download
+                            title="Tải xuống file"
+                            disabled={downloadingFiles[message.fileUrl!]}
                           >
-                            ⬇️ Tải xuống
-                          </a>
+                            {downloadingFiles[message.fileUrl!] ? '⏳ Đang tải...' : '⬇️ Tải xuống'}
+                          </button>
                         </div>
                       ) : (
                         <p>{message.content}</p>
