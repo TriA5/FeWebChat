@@ -16,14 +16,19 @@ import {
   sendGroupImageMessage,
   downloadChatFile,
   getMessagesPaginated,
-  getGroupMessagesPaginated
+  getGroupMessagesPaginated,
+  deleteMessage,
+  getConversationImages,
+  getConversationFiles,
+  ChatMessageDTO,
+  addMemberIfNotFriend
 } from '../../api/chat/chatApi';
+import { getUserById, BasicUserDTO, searchUserByPhone } from '../../api/user/userApi';
 import { getFriendsList } from '../../api/user/friendshipApi';
 import { initiateCall, endCall, VideoCallDTO } from '../../api/videocall/videoCallApi';
 import { WebRTCService } from '../../services/webrtc/WebRTCService';
 import IncomingCallModal from '../../components/videocall/IncomingCallModal';
 import VideoCallInterface from '../../components/videocall/VideoCallInterface';
-import { getUserById } from '../../api/user/userApi';
 import { 
   initiateGroupCall, 
   joinGroupCall, 
@@ -94,10 +99,18 @@ const Chat: React.FC = () => {
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [groupError, setGroupError] = useState<string | null>(null);
   const [groupSuccess, setGroupSuccess] = useState<string | null>(null);
-  const [modalTab, setModalTab] = useState<'create' | 'add-members'>('create');
+  const [modalTab, setModalTab] = useState<'create' | 'add-members' | 'add-by-phone'>('create');
   const [addingMembers, setAddingMembers] = useState(false);
   const [addMembersError, setAddMembersError] = useState<string | null>(null);
   const [addMembersSuccess, setAddMembersSuccess] = useState<string | null>(null);
+  
+  // Add member by phone states
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [searchingUser, setSearchingUser] = useState(false);
+  const [foundUser, setFoundUser] = useState<BasicUserDTO | null>(null);
+  const [addingByPhone, setAddingByPhone] = useState(false);
+  const [addByPhoneError, setAddByPhoneError] = useState<string | null>(null);
+  const [addByPhoneSuccess, setAddByPhoneSuccess] = useState<string | null>(null);
   
   // Delete group states
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -134,6 +147,16 @@ const Chat: React.FC = () => {
   const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [currentPage, setCurrentPage] = useState(0); // Track current page number
+  
+  // New features states
+  const [contextMenuMessage, setContextMenuMessage] = useState<Message | null>(null);
+  const [deletingMessage, setDeletingMessage] = useState(false);
+  const [showImagesModal, setShowImagesModal] = useState(false);
+  const [showFilesModal, setShowFilesModal] = useState(false);
+  const [conversationImages, setConversationImages] = useState<ChatMessageDTO[]>([]);
+  const [conversationFiles, setConversationFiles] = useState<ChatMessageDTO[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
+  const [loadingFiles, setLoadingFiles] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
@@ -749,6 +772,127 @@ const Chat: React.FC = () => {
     }
   };
 
+  // Handler for deleting message
+  const handleDeleteMessage = async () => {
+    if (!contextMenuMessage || !currentUser) return;
+    
+    if (!window.confirm('Bạn có chắc muốn xóa tin nhắn này?')) {
+      setContextMenuMessage(null);
+      return;
+    }
+    
+    setDeletingMessage(true);
+    try {
+      await deleteMessage(contextMenuMessage.id, currentUser.id);
+      // Remove message from local state
+      setMessages(prev => prev.filter(m => m.id !== contextMenuMessage.id));
+      setContextMenuMessage(null);
+    } catch (error: any) {
+      console.error('❌ Xóa tin nhắn thất bại:', error);
+      alert(error.message || 'Không thể xóa tin nhắn. Vui lòng thử lại.');
+    } finally {
+      setDeletingMessage(false);
+    }
+  };
+
+  // Handler for viewing all images in conversation
+  const handleViewImages = async () => {
+    if (!selectedChatRoom) return;
+    
+    setLoadingImages(true);
+    setShowImagesModal(true);
+    try {
+      const images = await getConversationImages(selectedChatRoom.id);
+      
+      // Fetch user info for all senders (API returns 'sender' not 'senderId')
+      const uniqueSenderIds = Array.from(new Set(images.map(img => img.sender)));
+      const userPromises = uniqueSenderIds.map(id => getUserById(id));
+      const users = await Promise.all(userPromises);
+      
+      // Update userCache with fetched users
+      const newCache: Record<string, { name: string; avatar?: string }> = {};
+      users.forEach(user => {
+        if (user) {
+          newCache[user.idUser] = {
+            name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || 'Unknown',
+            avatar: user.avatar
+          };
+        }
+      });
+      setUserCache(prev => ({ ...prev, ...newCache }));
+      
+      setConversationImages(images);
+    } catch (error: any) {
+      console.error('❌ Tải danh sách ảnh thất bại:', error);
+      alert(error.message || 'Không thể tải danh sách ảnh. Vui lòng thử lại.');
+      setShowImagesModal(false);
+    } finally {
+      setLoadingImages(false);
+    }
+  };
+
+  // Handler for viewing all files in conversation
+  const handleViewFiles = async () => {
+    if (!selectedChatRoom) return;
+    
+    setLoadingFiles(true);
+    setShowFilesModal(true);
+    try {
+      const files = await getConversationFiles(selectedChatRoom.id);
+      
+      // Fetch user info for all senders (API returns 'sender' not 'senderId')
+      const uniqueSenderIds = Array.from(new Set(files.map(f => f.sender)));
+      const userPromises = uniqueSenderIds.map(id => getUserById(id));
+      const users = await Promise.all(userPromises);
+      
+      // Update userCache with fetched users
+      const newCache: Record<string, { name: string; avatar?: string }> = {};
+      users.forEach(user => {
+        if (user) {
+          newCache[user.idUser] = {
+            name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || 'Unknown',
+            avatar: user.avatar
+          };
+        }
+      });
+      setUserCache(prev => ({ ...prev, ...newCache }));
+      
+      setConversationFiles(files);
+    } catch (error: any) {
+      console.error('❌ Tải danh sách file thất bại:', error);
+      alert(error.message || 'Không thể tải danh sách file. Vui lòng thử lại.');
+      setShowFilesModal(false);
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
+
+  // Helper function to get sender name from DTO
+  const getSenderName = (senderId: string): string => {
+    if (senderId === currentUser?.id) {
+      return 'Bạn';
+    }
+    // Try to get from userCache or friendMap
+    const cached = userCache[senderId] || friendMap[senderId];
+    return cached ? cached.name : 'Unknown User';
+  };
+
+  // Close dropdown menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't close if clicking on the menu button or menu itself
+      if (!target.closest('.message-actions')) {
+        setContextMenuMessage(null);
+      }
+    };
+    
+    if (contextMenuMessage) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [contextMenuMessage]);
+
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedChatRoom || !currentUser) return;
@@ -1184,6 +1328,64 @@ const Chat: React.FC = () => {
     } finally { setAddingMembers(false); }
   };
 
+  // Handler for searching user by phone
+  const handleSearchByPhone = async () => {
+    if (!phoneNumber.trim()) {
+      setAddByPhoneError('Vui lòng nhập số điện thoại');
+      return;
+    }
+    
+    setSearchingUser(true);
+    setAddByPhoneError(null);
+    setFoundUser(null);
+    
+    try {
+      const user = await searchUserByPhone(phoneNumber.trim());
+      if (user) {
+        setFoundUser(user);
+      } else {
+        setAddByPhoneError('Không tìm thấy người dùng với số điện thoại này');
+      }
+    } catch (error: any) {
+      setAddByPhoneError(error.message || 'Tìm kiếm thất bại');
+    } finally {
+      setSearchingUser(false);
+    }
+  };
+
+  // Handler for adding member by phone (not friend yet)
+  const handleAddMemberByPhone = async () => {
+    if (!selectedChatRoom || selectedChatRoom.type !== 'group' || !foundUser) return;
+    
+    setAddingByPhone(true);
+    setAddByPhoneError(null);
+    setAddByPhoneSuccess(null);
+    
+    try {
+      await addMemberIfNotFriend(selectedChatRoom.id, foundUser.idUser);
+      
+      // Update local state
+      setChatRooms(prev => prev.map(r => 
+        r.id === selectedChatRoom.id 
+          ? { ...r, participants: [...r.participants, foundUser.idUser] } 
+          : r
+      ));
+      setSelectedChatRoom(prev => prev ? { 
+        ...prev, 
+        participants: [...prev.participants, foundUser.idUser] 
+      } : prev);
+      
+      setAddByPhoneSuccess(`Đã thêm ${foundUser.firstName || ''} ${foundUser.lastName || ''}`.trim() || 'Đã thêm thành viên');
+      setPhoneNumber('');
+      setFoundUser(null);
+      setTimeout(() => setShowGroupModal(false), 1500);
+    } catch (error: any) {
+      setAddByPhoneError(error.message || 'Không thể thêm thành viên');
+    } finally {
+      setAddingByPhone(false);
+    }
+  };
+
   const formatTime = (date: Date) => {
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -1603,6 +1805,20 @@ const Chat: React.FC = () => {
               </div>
               
               <div className="chat-actions">
+                <button 
+                  className="action-btn" 
+                  onClick={handleViewImages}
+                  title="Xem tất cả ảnh"
+                >
+                  🖼️
+                </button>
+                <button 
+                  className="action-btn" 
+                  onClick={handleViewFiles}
+                  title="Xem tất cả file"
+                >
+                  📁
+                </button>
                 <button className="action-btn">📞</button>
                 {selectedChatRoom.type === 'private' && (
                   <button 
@@ -1702,43 +1918,73 @@ const Chat: React.FC = () => {
                     {!message.isOwn && (
                       <span className="message-sender">{message.senderName}</span>
                     )}
-                    <div className="message-bubble">
-                      {message.type === 'image' && message.imageUrl ? (
-                        <img 
-                          src={message.imageUrl} 
-                          alt="Attachment" 
-                          className="message-image"
-                          onClick={() => window.open(message.imageUrl, '_blank')}
-                        />
-                      ) : message.type === 'file' && message.fileUrl && isVideoFile(message.fileName, message.fileUrl) ? (
-                        <video
-                          className="message-video"
-                          src={message.fileUrl}
-                          controls
-                          preload="metadata"
-                        />
-                      ) : message.type === 'file' && message.fileUrl ? (
-                        <div className="file-attachment">
-                          <div className="file-icon">
-                            📎
-                          </div>
-                          <div className="file-info">
-                            <div className="file-name">{message.fileName}</div>
-                            <div className="file-size">
-                              {message.fileSize ? (message.fileSize / 1024).toFixed(2) + ' KB' : 'Unknown size'}
+                    <div className="message-bubble-wrapper">
+                      <div className="message-bubble">
+                        {message.type === 'image' && message.imageUrl ? (
+                          <img 
+                            src={message.imageUrl} 
+                            alt="Attachment" 
+                            className="message-image"
+                            onClick={() => window.open(message.imageUrl, '_blank')}
+                          />
+                        ) : message.type === 'file' && message.fileUrl && isVideoFile(message.fileName, message.fileUrl) ? (
+                          <video
+                            className="message-video"
+                            src={message.fileUrl}
+                            controls
+                            preload="metadata"
+                          />
+                        ) : message.type === 'file' && message.fileUrl ? (
+                          <div className="file-attachment">
+                            <div className="file-icon">
+                              📎
                             </div>
+                            <div className="file-info">
+                              <div className="file-name">{message.fileName}</div>
+                              <div className="file-size">
+                                {message.fileSize ? (message.fileSize / 1024).toFixed(2) + ' KB' : 'Unknown size'}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleDownloadFile(message.fileUrl!, message.fileName)}
+                              className="file-download-btn"
+                              title="Tải xuống file"
+                              disabled={downloadingFiles[message.fileUrl!]}
+                            >
+                              {downloadingFiles[message.fileUrl!] ? '⏳ Đang tải...' : '⬇️ Tải xuống'}
+                            </button>
                           </div>
+                        ) : (
+                          <p>{message.content}</p>
+                        )}
+                      </div>
+                      {message.isOwn && (
+                        <div className="message-actions">
                           <button
-                            onClick={() => handleDownloadFile(message.fileUrl!, message.fileName)}
-                            className="file-download-btn"
-                            title="Tải xuống file"
-                            disabled={downloadingFiles[message.fileUrl!]}
+                            className="message-menu-btn"
+                            onClick={() => {
+                              if (contextMenuMessage?.id === message.id) {
+                                setContextMenuMessage(null);
+                              } else {
+                                setContextMenuMessage(message);
+                              }
+                            }}
+                            title="Tùy chọn"
                           >
-                            {downloadingFiles[message.fileUrl!] ? '⏳ Đang tải...' : '⬇️ Tải xuống'}
+                            ⋮
                           </button>
+                          {contextMenuMessage?.id === message.id && (
+                            <div className="message-dropdown-menu">
+                              <button
+                                className="dropdown-item delete-item"
+                                onClick={handleDeleteMessage}
+                                disabled={deletingMessage}
+                              >
+                                {deletingMessage ? '⏳ Đang xóa...' : '🗑️ Xóa tin nhắn'}
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <p>{message.content}</p>
                       )}
                     </div>
                     <span className="message-time">
@@ -1906,7 +2152,10 @@ const Chat: React.FC = () => {
             <div className="group-modal-tabs">
               <button className={modalTab === 'create' ? 'active' : ''} onClick={() => setModalTab('create')}>Tạo nhóm</button>
               {selectedChatRoom?.type === 'group' && selectedChatRoom.role === 'ADMIN' && (
-                <button className={modalTab === 'add-members' ? 'active' : ''} onClick={() => { setModalTab('add-members'); setSelectedMemberIds([]); setAddMembersError(null); setAddMembersSuccess(null); }}>Thêm thành viên</button>
+                <>
+                  <button className={modalTab === 'add-members' ? 'active' : ''} onClick={() => { setModalTab('add-members'); setSelectedMemberIds([]); setAddMembersError(null); setAddMembersSuccess(null); }}>Thêm bạn bè</button>
+                  <button className={modalTab === 'add-by-phone' ? 'active' : ''} onClick={() => { setModalTab('add-by-phone'); setPhoneNumber(''); setFoundUser(null); setAddByPhoneError(null); setAddByPhoneSuccess(null); }}>Thêm bằng SĐT</button>
+                </>
               )}
             </div>
             {modalTab === 'create' && (
@@ -1967,6 +2216,61 @@ const Chat: React.FC = () => {
                 <button type="submit" className="create-group-submit" disabled={addingMembers}>{addingMembers ? 'Đang thêm...' : 'Thêm'}</button>
               </form>
             )}
+            {modalTab === 'add-by-phone' && selectedChatRoom?.type === 'group' && (
+              <div className="group-form">
+                <label>Tìm kiếm người dùng bằng số điện thoại</label>
+                <div className="phone-search-container">
+                  <input
+                    type="tel"
+                    value={phoneNumber}
+                    placeholder="Nhập số điện thoại"
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSearchByPhone()}
+                  />
+                  <button 
+                    type="button" 
+                    onClick={handleSearchByPhone}
+                    disabled={searchingUser}
+                    className="search-phone-btn"
+                  >
+                    {searchingUser ? '⏳ Đang tìm...' : '🔍 Tìm kiếm'}
+                  </button>
+                </div>
+                
+                {foundUser && (
+                  <div className="found-user-card">
+                    <div className="found-user-info">
+                      {foundUser.avatar ? (
+                        <img src={foundUser.avatar} alt="Avatar" className="found-user-avatar" />
+                      ) : (
+                        <div className="found-user-avatar-placeholder">
+                          {(foundUser.firstName || foundUser.username || 'U').charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="found-user-details">
+                        <div className="found-user-name">
+                          {`${foundUser.firstName || ''} ${foundUser.lastName || ''}`.trim() || foundUser.username}
+                        </div>
+                        {foundUser.phoneNumber && (
+                          <div className="found-user-phone">{foundUser.phoneNumber}</div>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddMemberByPhone}
+                      disabled={addingByPhone}
+                      className="add-found-user-btn"
+                    >
+                      {addingByPhone ? '⏳ Đang thêm...' : '➕ Thêm vào nhóm'}
+                    </button>
+                  </div>
+                )}
+                
+                {addByPhoneError && <div className="group-error">{addByPhoneError}</div>}
+                {addByPhoneSuccess && <div className="group-success">{addByPhoneSuccess}</div>}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1998,6 +2302,84 @@ const Chat: React.FC = () => {
               >
                 {deletingGroup ? 'Đang xóa...' : 'Xóa nhóm'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Images Modal */}
+      {showImagesModal && (
+        <div className="group-modal-overlay" onClick={() => setShowImagesModal(false)}>
+          <div className="group-modal images-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="group-modal-header">
+              <h3>🖼️ Tất cả ảnh trong cuộc trò chuyện</h3>
+              <button onClick={() => setShowImagesModal(false)}>✖</button>
+            </div>
+            <div className="images-grid">
+              {loadingImages ? (
+                <div className="loading-message">Đang tải ảnh...</div>
+              ) : conversationImages.length === 0 ? (
+                <div className="empty-hint">Chưa có ảnh nào trong cuộc trò chuyện này</div>
+              ) : (
+                conversationImages.map((msg) => (
+                  <div key={msg.id} className="image-item">
+                    <img 
+                      src={msg.imageUrl} 
+                      alt="Chat attachment"
+                      onClick={() => window.open(msg.imageUrl, '_blank')}
+                    />
+                    <div className="image-info">
+                      <span className="image-sender">{getSenderName(msg.sender)}</span>
+                      <span className="image-time">{formatMessageTime(new Date(msg.createdAt))}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Files Modal */}
+      {showFilesModal && (
+        <div className="group-modal-overlay" onClick={() => setShowFilesModal(false)}>
+          <div className="group-modal files-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="group-modal-header">
+              <h3>📁 Tất cả file trong cuộc trò chuyện</h3>
+              <button onClick={() => setShowFilesModal(false)}>✖</button>
+            </div>
+            <div className="files-list">
+              {loadingFiles ? (
+                <div className="loading-message">Đang tải file...</div>
+              ) : conversationFiles.length === 0 ? (
+                <div className="empty-hint">Chưa có file nào trong cuộc trò chuyện này</div>
+              ) : (
+                conversationFiles.map((msg) => (
+                  <div key={msg.id} className="file-list-item">
+                    <div className="file-icon-large">📎</div>
+                    <div className="file-details">
+                      <div className="file-name-large">{msg.fileName}</div>
+                      <div className="file-meta">
+                        <span className="file-sender">{getSenderName(msg.sender)}</span>
+                        <span className="file-separator">•</span>
+                        <span className="file-size">
+                          {msg.fileSize ? (msg.fileSize / 1024).toFixed(2) + ' KB' : 'Unknown size'}
+                        </span>
+                        <span className="file-separator">•</span>
+                        <span className="file-time">{formatMessageTime(new Date(msg.createdAt))}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDownloadFile(msg.fileUrl!, msg.fileName)}
+                      className="file-download-btn-large"
+                      title="Tải xuống file"
+                      disabled={downloadingFiles[msg.fileUrl!]}
+                    >
+                      {downloadingFiles[msg.fileUrl!] ? '⏳' : '⬇️'}
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

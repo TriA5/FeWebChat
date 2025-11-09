@@ -7,7 +7,8 @@ export interface ChatMessageDTO {
   id: string;
   conversationId?: string; // null cho group chat
   groupId?: string;
-  senderId: string;
+  sender: string; // userId của người gửi
+  senderId: string; // Deprecated, use 'sender' instead
   content: string;
   messageType: 'TEXT' | 'IMAGE' | 'FILE';
   imageUrl?: string;
@@ -142,6 +143,16 @@ export async function joinGroup(groupId: string, userId: string): Promise<void> 
     headers: { 'Authorization': `Bearer ${token}` }
   });
   if (!res.ok) throw new Error(await res.text() || 'Failed to join group');
+}
+
+export async function addMemberIfNotFriend(groupId: string, userId: string): Promise<void> {
+  const token = getToken();
+  if (!token) throw new Error('No JWT token found');
+  const res = await fetch(`${API_BASE_URL}/groups/${encodeURIComponent(groupId)}/add-member-if-not-friend?userId=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error(await res.text() || 'Không thể thêm thành viên vào nhóm');
 }
 
 export async function getGroupMessages(groupId: string): Promise<ChatMessageDTO[]> {
@@ -386,4 +397,73 @@ export async function downloadChatFile(fileUrl: string, fileName?: string): Prom
     window.URL.revokeObjectURL(url);
     a.remove();
   }, 100);
+}
+
+// Xóa tin nhắn
+export async function deleteMessage(messageId: string, userId: string): Promise<void> {
+  const token = getToken();
+  if (!token) throw new Error('No JWT token found');
+  
+  const res = await fetch(
+    `${API_BASE_URL}/chats/delete-message/${encodeURIComponent(messageId)}?userId=${encodeURIComponent(userId)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    }
+  );
+  
+  if (!res.ok) {
+    const text = await res.text().catch(() => 'Unknown server error');
+    throw new Error(text || 'Xóa tin nhắn thất bại');
+  }
+}
+
+// Lấy tất cả ảnh trong conversation
+export async function getConversationImages(conversationId: string): Promise<ChatMessageDTO[]> {
+  const token = getToken();
+  if (!token) throw new Error('No JWT token found');
+  
+  const res = await fetch(
+    `${API_BASE_URL}/chats/images/${encodeURIComponent(conversationId)}`,
+    {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    }
+  );
+  
+  if (!res.ok) {
+    const text = await res.text().catch(() => 'Unknown server error');
+    throw new Error(text || 'Lấy danh sách ảnh thất bại');
+  }
+  
+  return res.json();
+}
+
+// Lấy tất cả file trong conversation
+export async function getConversationFiles(conversationId: string): Promise<ChatMessageDTO[]> {
+  const token = getToken();
+  if (!token) throw new Error('No JWT token found');
+  
+  const res = await fetch(
+    `${API_BASE_URL}/chats/files/${encodeURIComponent(conversationId)}`,
+    {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    }
+  );
+  
+  if (!res.ok) {
+    const text = await res.text().catch(() => 'Unknown server error');
+    throw new Error(text || 'Lấy danh sách file thất bại');
+  }
+  
+  return res.json();
 }
