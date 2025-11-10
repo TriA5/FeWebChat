@@ -1,0 +1,292 @@
+.share-section {
+  background: #f7f8fa;
+  border: 1px solid #e4e6eb;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.share-section__header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.share-section__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.share-section__author-info {
+  flex: 1;
+}
+
+.share-section__author-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #050505;
+}
+
+.share-section__timestamp {
+  font-size: 12px;
+  color: #65676b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.privacy-badge {
+  font-size: 12px;
+}
+
+.share-section__delete {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.share-section__delete:hover {
+  background: #e4e6eb;
+}
+
+.share-section__content {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #050505;
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+}
+
+.share-section__original {
+  background: white;
+  border: 1px solid #e4e6eb;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.original-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.original-header img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.original-header span {
+  font-weight: 600;
+  font-size: 13px;
+  color: #050505;
+}
+
+.original-content {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #050505;
+  margin-bottom: 8px;
+}
+
+.original-images {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.original-images img {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.share-section__actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid #e4e6eb;
+}
+
+.action-btn {
+  flex: 1;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #65676b;
+  transition: background 0.2s;
+}
+
+.action-btn:hover {
+  background: #e4e6eb;
+}
+
+.action-btn.liked {
+  color: #e74c3c;
+}
+
+.share-section__comments {
+  border-top: 1px solid #e4e6eb;
+  padding-top: 12px;
+  margin-top: 8px;
+}
+
+.share-comment-input {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.share-comment-input input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ccd0d5;
+  border-radius: 18px;
+  font-size: 13px;
+  outline: none;
+}
+
+.share-comment-input input:focus {
+  border-color: #1877f2;
+}
+
+.share-comment-input button {
+  padding: 8px 16px;
+  background: #1877f2;
+  color: white;
+  border: none;
+  border-radius: 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.share-comment-input button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.share-comment {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.share-comment.depth-1 {
+  margin-left: 40px;
+}
+
+.share-comment.depth-2 {
+  margin-left: 40px;
+}
+
+.share-comment.depth-3 {
+  margin-left: 40px;
+}
+
+.share-comment__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.share-comment__content {
+  flex: 1;
+}
+
+.share-comment__bubble {
+  background: #e4e6eb;
+  border-radius: 18px;
+  padding: 8px 12px;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.share-comment__bubble strong {
+  font-size: 13px;
+  color: #050505;
+  margin-bottom: 2px;
+  display: block;
+}
+
+.share-comment__bubble p {
+  font-size: 13px;
+  color: #050505;
+  margin: 0;
+}
+
+.share-comment__meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+  padding-left: 12px;
+  font-size: 12px;
+  color: #65676b;
+}
+
+.share-comment__meta button {
+  background: none;
+  border: none;
+  color: #65676b;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.share-comment__meta button:hover {
+  text-decoration: underline;
+}
+
+.share-reply-input {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.share-reply-input input {
+  flex: 1;
+  padding: 6px 12px;
+  border: 1px solid #ccd0d5;
+  border-radius: 18px;
+  font-size: 13px;
+  outline: none;
+}
+
+.share-reply-input button {
+  padding: 6px 12px;
+  background: #1877f2;
+  color: white;
+  border: none;
+  border-radius: 18px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.share-comment__replies {
+  margin-top: 8px;
+}
+
+.share-comments-loading,
+.share-comments-empty {
+  text-align: center;
+  padding: 16px;
+  color: #65676b;
+  font-size: 13px;
+}

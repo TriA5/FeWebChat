@@ -1,0 +1,102 @@
+.share-poster-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(245, 87, 108, 0.2);
+}
+
+.share-poster-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(245, 87, 108, 0.4);
+}
+
+.share-poster-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.share-poster-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.share-icon {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.share-count {
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.3);
+  padding: 2px 8px;
+  border-radius: 12px;
+  min-width: 24px;
+  text-align: center;
+}
+
+/* Compact variant */
+.share-poster-btn.compact {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+}
+
+.share-poster-btn.compact .share-icon {
+  font-size: 14px;
+}
+
+.share-poster-btn.compact .share-count {
+  font-size: 12px;
+  padding: 1px 6px;
+}
+
+/* Icon-only variant */
+.share-poster-btn.icon-only {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  justify-content: center;
+}
+
+.share-poster-btn.icon-only .share-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5576c;
+  border: 2px solid white;
+  font-size: 11px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .share-poster-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .share-icon {
+    font-size: 14px;
+  }
+
+  .share-count {
+    font-size: 12px;
+    padding: 1px 6px;
+  }
+}

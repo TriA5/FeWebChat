@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import './Home.css';
-import { getVisiblePosters, deletePoster } from '../../api/poster/posterApi';
+import { getVisiblePosters, deletePoster, getPosterById } from '../../api/poster/posterApi';
 import { getUserInfo } from '../../api/user/loginApi';
 import { connect, subscribe } from '../../api/websocket/stompClient';
 import type { StompSubscription } from '@stomp/stompjs';
@@ -9,6 +9,24 @@ import ImageViewer from '../../components/ImageViewer';
 import { likePoster, unlikePoster, getTotalLikes, checkUserLikedPoster, setUserLikedPoster } from '../../api/poster/likeApi';
 import { getCommentsByPosterId, formatCommentTime, countTotalComments, createComment, replyToComment, updateComment, deleteComment, type Comment } from '../../api/poster/commentApi';
 import { getUserById } from '../../api/user/userApi';
+import { 
+	SharePosterDTO, 
+	getShareFeed, 
+	createShare, 
+	deleteShare,
+	countSharesOfPoster,
+	likeShare,
+	unlikeShare,
+	getLikeCountShare,
+	checkIfUserLikedShare,
+	getShareDetails,
+	createShareComment,
+	getShareComments,
+	replyToShareComment,
+	updateShareComment,
+	deleteShareComment
+} from '../../api/poster/shareApi';
+import ShareSection from './ShareSection';
 
 interface Story {
 	id: number;
@@ -39,6 +57,23 @@ interface Post {
 	reactions: number;
 	comments: number;
 	shares: number;
+	// Share fields
+	isShare?: boolean;
+	shareId?: string;
+	shareContent?: string;
+	shareUserId?: string;
+	shareUserName?: string;
+	shareUserAvatar?: string;
+	shareCreatedAt?: string;
+	sharePrivacy?: 'public' | 'friends' | 'private';
+	// Original poster fields (when post is a share)
+	originalPosterId?: string;
+	originalAuthorId?: string;
+	originalAuthorName?: string;
+	originalAuthorAvatar?: string;
+	originalContent?: string;
+	originalImages?: string[];
+	originalVideos?: VideoDTO[];
 }
 
 const stories: Story[] = [
@@ -135,6 +170,15 @@ const Home: React.FC = () => {
 	// Nested replies expand state
 	const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({}); // commentId -> expanded
 	
+	// Share state
+	const [shareCounts, setShareCounts] = useState<Record<string, number>>({});
+	const [showShareModal, setShowShareModal] = useState<string | null>(null); // posterId being shared
+	const [shareContent, setShareContent] = useState('');
+	const [sharePrivacy, setSharePrivacy] = useState<'PUBLIC' | 'FRIENDS' | 'PRIVATE'>('PUBLIC');
+	const [submittingShare, setSubmittingShare] = useState(false);
+	const [postShares, setPostShares] = useState<Record<string, SharePosterDTO[]>>({}); // shares by postId
+	const [showPostShares, setShowPostShares] = useState<Record<string, boolean>>({}); // show/hide shares by postId
+	
 	// Use ref for WebSocket subscriptions to prevent re-subscription
 	const subscriptionsRef = useRef<StompSubscription[]>([]);
 	const currentUserRef = useRef<any>(null);
@@ -190,6 +234,82 @@ const Home: React.FC = () => {
 		};
 	}, []);
 
+	// Helper function to convert SharePosterDTO to Post
+	const convertShareToPost = useCallback((share: SharePosterDTO): Post => {
+		const now = new Date();
+		const createdDate = new Date(share.createdAt);
+		const diffInMinutes = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60));
+
+		let timeStr = '';
+		if (diffInMinutes < 1) {
+			timeStr = 'Vừa xong';
+		} else if (diffInMinutes < 60) {
+			timeStr = `${diffInMinutes} phút trước`;
+		} else if (diffInMinutes < 1440) {
+			timeStr = `${Math.floor(diffInMinutes / 60)} giờ trước`;
+		} else {
+			timeStr = `${Math.floor(diffInMinutes / 1440)} ngày trước`;
+		}
+
+		// Map privacy status
+		let audience: 'public' | 'friends' | 'private' = 'public';
+		if (share.privacyStatusName === 'PUBLIC') {
+			audience = 'public';
+		} else if (share.privacyStatusName === 'FRIENDS') {
+			audience = 'friends';
+		} else if (share.privacyStatusName === 'PRIVATE') {
+			audience = 'private';
+		}
+
+		return {
+			id: share.idShare,
+			authorId: share.idUser,
+			authorName: share.userName,
+			authorAvatar: share.userAvatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80',
+			time: timeStr,
+			audience,
+			content: share.content,
+			reactions: share.likeCount || 0,
+			comments: share.commentCount || 0,
+			shares: 0,
+			// Share-specific fields
+			isShare: true,
+			shareId: share.idShare,
+			shareContent: share.content,
+			shareUserId: share.idUser,
+			shareUserName: share.userName,
+			shareUserAvatar: share.userAvatar,
+			shareCreatedAt: share.createdAt,
+			sharePrivacy: audience,
+			// Original poster fields
+			originalPosterId: share.originalPoster.idPoster,
+			originalAuthorName: share.originalPoster.userName,
+			originalAuthorAvatar: share.originalPoster.userAvatar,
+			originalContent: share.originalPoster.content,
+			originalImages: share.originalPoster.images,
+			originalVideos: share.originalPoster.videos
+		};
+	}, []);
+
+	// Helper function to recursively convert ShareCommentDTO to Comment
+	const convertShareCommentToComment = useCallback((sc: any, postId: string): Comment => {
+		const convert = (item: any): Comment => ({
+			idComment: item.idCommentShare,
+			idPoster: postId,
+			content: item.content,
+			idUser: item.idUser,
+			parentCommentId: item.parentCommentId || null,
+			createdAt: item.createdAt,
+			updatedAt: item.updatedAt || item.createdAt,
+			userName: item.userName,
+			userAvatar: item.userAvatar,
+			replyCount: item.replyCount || (item.replies ? item.replies.length : 0),
+			// Recursively convert nested replies
+			replies: item.replies ? item.replies.map((r: any) => convert(r)) : []
+		});
+		return convert(sc);
+	}, []);
+
 	// Fetch posters từ backend
 	// Fetch posts with pagination
 	const fetchPosts = useCallback(async (pageNum: number = 0) => {
@@ -217,18 +337,13 @@ const Home: React.FC = () => {
 			const posters = await getVisiblePosters(currentUser.id);
 			console.log('✅ Received posters:', posters.length, posters);
 			
-			// Paginate manually (slice posts)
-			const PAGE_SIZE = 5;
-			const start = pageNum * PAGE_SIZE;
-			const end = start + PAGE_SIZE;
-			const paginatedPosters = posters.slice(start, end);
+			// Fetch shares
+			console.log('🔍 Fetching shares for user:', currentUser.id);
+			const shares = await getShareFeed(currentUser.id);
+			console.log('✅ Received shares:', shares.length, shares);
 			
-			if (paginatedPosters.length < PAGE_SIZE) {
-				setHasMore(false);
-			}
-			
-			// Chuyển đổi PosterDTO sang Post
-			const convertedPosts: Post[] = paginatedPosters.map((poster, index) => {
+			// Convert posters to posts
+			const postersAsPosts: Post[] = posters.map((poster, index) => {
 				const post = convertPosterToPost(poster, index);
 				if (poster.videos && poster.videos.length > 0) {
 					console.log('🎥 Poster with videos:', {
@@ -239,30 +354,99 @@ const Home: React.FC = () => {
 				}
 				return post;
 			});
+			
+			// Convert shares to posts
+			const sharesAsPosts: Post[] = await Promise.all(
+				shares.map(async (share) => {
+					try {
+						// Fetch user info for share author
+						const userInfo = await getUserById(share.idUser);
+						
+						// Fetch original poster details
+						const originalPoster = await getPosterById(share.originalPoster.idPoster);
+						
+						// Get full name with fallback
+						const authorFullName = userInfo 
+							? (`${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || userInfo.username || share.userName)
+							: share.userName;
+						
+						const originalAuthorFullName = originalPoster
+							? (`${originalPoster.userFirstName || ''} ${originalPoster.userLastName || ''}`.trim() || originalPoster.userName)
+							: share.originalPoster.userName;
+						
+						// Convert with enriched data
+						const post = convertShareToPost(share);
+						return {
+							...post,
+							authorName: authorFullName,
+							originalAuthorName: originalAuthorFullName,
+							originalImages: originalPoster?.imageUrls || share.originalPoster.images || [],
+							originalVideos: originalPoster?.videos || share.originalPoster.videos || []
+						} as Post;
+					} catch (error) {
+						console.error('Error enriching share:', error);
+						// Fallback to basic conversion
+						return convertShareToPost(share);
+					}
+				})
+			);
+			
+			// Merge and sort by date (newest first)
+			const allPosts = [...postersAsPosts, ...sharesAsPosts].sort((a, b) => {
+				// Sort by time string (will need proper date comparison)
+				// For now, keep shares at top
+				if (a.isShare && !b.isShare) return -1;
+				if (!a.isShare && b.isShare) return 1;
+				return 0;
+			});
+			
+			// Paginate manually (slice posts)
+			const PAGE_SIZE = 5;
+			const start = pageNum * PAGE_SIZE;
+			const end = start + PAGE_SIZE;
+			const paginatedPosts = allPosts.slice(start, end);
+			
+			if (paginatedPosts.length < PAGE_SIZE) {
+				setHasMore(false);
+			}
 
 			if (pageNum === 0) {
-				setPosts(convertedPosts);
+				setPosts(paginatedPosts);
 			} else {
-				setPosts(prev => [...prev, ...convertedPosts]);
+				setPosts(prev => [...prev, ...paginatedPosts]);
 			}
-			console.log('✅ Converted posts:', convertedPosts.length);
+			console.log('✅ Converted posts:', paginatedPosts.length);
 			
 			// Fetch like counts for all posts
 			const likeCountsData: Record<string, number> = {};
 			const userLikedData: Record<string, boolean> = {};
 			
 			await Promise.all(
-				convertedPosts.map(async (post) => {
+				paginatedPosts.map(async (post) => {
 					try {
-						const count = await getTotalLikes(post.id);
-						likeCountsData[post.id] = count;
-						
-						// Check if current user liked this post
-						if (currentUser?.id) {
-							userLikedData[post.id] = checkUserLikedPoster(post.id, currentUser.id);
+						if (post.isShare) {
+							// Use Share API for likes
+							const countResult = await getLikeCountShare(post.id);
+							// Handle if API returns object or number
+							likeCountsData[post.id] = typeof countResult === 'number' ? countResult : (countResult as any)?.likeCount || 0;
+							
+							// Check if current user liked this share
+							if (currentUser?.id) {
+								const likeStatus = await checkIfUserLikedShare(post.id, currentUser.id);
+								userLikedData[post.id] = likeStatus.isLiked;
+							}
+						} else {
+							// Use Poster API for likes
+							const count = await getTotalLikes(post.id);
+							likeCountsData[post.id] = count;
+							
+							// Check if current user liked this post
+							if (currentUser?.id) {
+								userLikedData[post.id] = checkUserLikedPoster(post.id, currentUser.id);
+							}
 						}
 					} catch (error) {
-						console.error(`❌ Error fetching likes for post ${post.id}:`, error);
+						console.error(`❌ Error fetching likes for ${post.isShare ? 'share' : 'post'} ${post.id}:`, error);
 						likeCountsData[post.id] = 0;
 						userLikedData[post.id] = false;
 					}
@@ -278,16 +462,24 @@ const Home: React.FC = () => {
 			}
 			console.log('✅ Like counts loaded:', likeCountsData);
 			
-			// Fetch comment counts for all posts
+			// Fetch comment counts for all posts (both posters and shares)
 			const commentCountsData: Record<string, number> = {};
 			await Promise.all(
-				convertedPosts.map(async (post) => {
+				paginatedPosts.map(async (post) => {
 					try {
-						const postComments = await getCommentsByPosterId(post.id);
-						const totalCount = countTotalComments(postComments);
-						commentCountsData[post.id] = totalCount;
+						if (post.isShare) {
+							// For shares, fetch from API and count recursively
+							const shareComments = await getShareComments(post.id);
+							const totalCount = countTotalComments(shareComments.map((sc: any) => convertShareCommentToComment(sc, post.id)));
+							commentCountsData[post.id] = totalCount;
+						} else {
+							// For posters, fetch from API
+							const postComments = await getCommentsByPosterId(post.id);
+							const totalCount = countTotalComments(postComments);
+							commentCountsData[post.id] = totalCount;
+						}
 					} catch (error) {
-						console.error(`❌ Error fetching comments for post ${post.id}:`, error);
+						console.error(`❌ Error fetching comments for ${post.isShare ? 'share' : 'post'} ${post.id}:`, error);
 						commentCountsData[post.id] = 0;
 					}
 				})
@@ -299,19 +491,38 @@ const Home: React.FC = () => {
 				setCommentCounts(prev => ({ ...prev, ...commentCountsData }));
 			}
 			console.log('✅ Comment counts loaded:', commentCountsData);
+			
+			// Fetch share counts for all posts
+			const shareCountsData: Record<string, number> = {};
+			await Promise.all(
+				paginatedPosts.filter(post => !post.isShare).map(async (post) => {
+					try {
+						const result = await countSharesOfPoster(post.id);
+						shareCountsData[post.id] = result.shareCount || 0;
+					} catch (error) {
+						console.error(`❌ Error fetching shares for post ${post.id}:`, error);
+						shareCountsData[post.id] = 0;
+					}
+				})
+			);
+			
+			if (pageNum === 0) {
+				setShareCounts(shareCountsData);
+			} else {
+				setShareCounts(prev => ({ ...prev, ...shareCountsData }));
+			}
+			console.log('✅ Share counts loaded:', shareCountsData);
 		} catch (error) {
 			console.error('❌ Error loading posters:', error);
 			setHasMore(false);
 		} finally {
 			if (pageNum === 0) {
-				setLoading(false);
-			} else {
-				setLoadingMore(false);
-			}
+			setLoading(false);
+		} else {
+			setLoadingMore(false);
 		}
-	}, [convertPosterToPost]);
-
-	// Initial load
+	}
+}, [convertPosterToPost, convertShareToPost, convertShareCommentToComment]);	// Initial load
 	useEffect(() => {
 		fetchPosts(0);
 		setPage(0);
@@ -504,13 +715,29 @@ const Home: React.FC = () => {
 			if (!comments[postId]) {
 				setLoadingComments(prev => ({ ...prev, [postId]: true }));
 				try {
-					const postComments = await getCommentsByPosterId(postId);
+					// Find the post to check if it's a share
+					const post = posts.find(p => p.id === postId);
+					const isShare = post?.isShare || false;
+					
+					let postComments: any[] = [];
+					if (isShare) {
+						// Use Share Comments API
+						const shareComments = await getShareComments(postId);
+						console.log('📝 Loaded share comments:', shareComments);
+						
+						// Convert ShareCommentDTO[] to Comment[] recursively
+						postComments = shareComments.map((sc: any) => convertShareCommentToComment(sc, postId));
+					} else {
+						// Use Poster Comments API
+						postComments = await getCommentsByPosterId(postId);
+						console.log('📝 Loaded poster comments:', postComments);
+					}
 					
 					// Fetch user data for all comments and replies
 					const enrichedComments = await enrichCommentsWithUserData(postComments);
 					
 					setComments(prev => ({ ...prev, [postId]: enrichedComments }));
-					console.log(`✅ Loaded comments for post ${postId}:`, enrichedComments);
+					console.log(`✅ Loaded comments for ${isShare ? 'share' : 'post'} ${postId}:`, enrichedComments);
 				} catch (error) {
 					console.error('❌ Error loading comments:', error);
 				} finally {
@@ -572,10 +799,36 @@ const Home: React.FC = () => {
 			return;
 		}
 
+		// Find the post to check if it's a share
+		const post = posts.find(p => p.id === postId);
+		const isShare = post?.isShare || false;
+
 		setSubmittingComment(prev => ({ ...prev, [postId]: true }));
 
 		try {
-			const newComment = await createComment(postId, currentUser.id, content);
+			let newComment;
+			
+			if (isShare) {
+				// Use Share Comment API
+				const shareComment = await createShareComment(postId, {
+					userId: currentUser.id,
+					content: content
+				});
+				
+				// Convert ShareCommentDTO to Comment format
+				newComment = {
+					idComment: shareComment.idCommentShare,
+					idPoster: postId, // Use shareId as posterId for consistency
+					content: shareComment.content,
+					idUser: shareComment.idUser,
+					parentCommentId: shareComment.parentCommentId || null,
+					createdAt: shareComment.createdAt,
+					updatedAt: shareComment.updatedAt || shareComment.createdAt
+				};
+			} else {
+				// Use Poster Comment API
+				newComment = await createComment(postId, currentUser.id, content);
+			}
 			
 			if (newComment) {
 				// Fetch fresh user data from API to avoid encoding issues
@@ -610,7 +863,7 @@ const Home: React.FC = () => {
 				// Show comments if not already shown
 				setShowComments(prev => ({ ...prev, [postId]: true }));
 
-				console.log('✅ Comment added successfully');
+				console.log('✅ Comment added successfully to', isShare ? 'share' : 'post');
 			} else {
 				alert('Không thể thêm bình luận. Vui lòng thử lại.');
 			}
@@ -659,10 +912,38 @@ const Home: React.FC = () => {
 			return;
 		}
 
+		// Find the post to check if it's a share
+		const post = posts.find(p => p.id === postId);
+		const isShare = post?.isShare || false;
+
 		setSubmittingReply(prev => ({ ...prev, [parentCommentId]: true }));
 
 		try {
-			const newReply = await replyToComment(postId, parentCommentId, currentUser.id, content);
+			let newReply: Comment | null | undefined;
+			
+			if (isShare) {
+				// Use Share API
+				const shareReply = await replyToShareComment(parentCommentId, {
+					userId: currentUser.id,
+					content: content
+				});
+				
+				// Convert ShareCommentDTO to Comment format
+				newReply = {
+					idComment: shareReply.idCommentShare,
+					idPoster: postId,
+					content: shareReply.content,
+					idUser: shareReply.idUser,
+					parentCommentId: shareReply.parentCommentId || null,
+					createdAt: shareReply.createdAt,
+					updatedAt: shareReply.updatedAt || shareReply.createdAt,
+					replies: [],
+					replyCount: 0
+				};
+			} else {
+				// Use Poster API
+				newReply = await replyToComment(postId, parentCommentId, currentUser.id, content);
+			}
 			
 			if (newReply) {
 				// Fetch fresh user data from API to avoid encoding issues
@@ -776,12 +1057,44 @@ const Home: React.FC = () => {
 			return;
 		}
 
+		// Find the post to check if it's a share
+		const post = posts.find(p => p.id === postId);
+		const isShare = post?.isShare || false;
+
 		setSubmittingEdit(prev => ({ ...prev, [commentId]: true }));
 
 		try {
-			const updatedComment = await updateComment(postId, commentId, currentUser.id, content);
+			let updatedComment: Comment | null | undefined;
+			
+			if (isShare) {
+				// Use Share API
+				const shareComment = await updateShareComment(commentId, {
+					userId: currentUser.id,
+					content: content
+				});
+				
+				// Convert ShareCommentDTO to Comment format
+				updatedComment = {
+					idComment: shareComment.idCommentShare,
+					idPoster: postId,
+					content: shareComment.content,
+					idUser: shareComment.idUser,
+					parentCommentId: shareComment.parentCommentId || null,
+					createdAt: shareComment.createdAt,
+					updatedAt: shareComment.updatedAt || shareComment.createdAt,
+					replies: [],
+					replyCount: 0
+				};
+			} else {
+				// Use Poster API
+				updatedComment = await updateComment(postId, commentId, currentUser.id, content);
+			}
 			
 			if (updatedComment) {
+				// Store the updated comment value to avoid null/undefined issues in nested functions
+				const updatedContent = updatedComment.content;
+				const updatedTime = updatedComment.updatedAt;
+				
 				// Update comment in state
 				setComments(prev => {
 					const postComments = [...(prev[postId] || [])];
@@ -792,8 +1105,8 @@ const Home: React.FC = () => {
 							if (comment.idComment === commentId) {
 								return {
 									...comment,
-									content: updatedComment.content,
-									updatedAt: updatedComment.updatedAt
+									content: updatedContent,
+									updatedAt: updatedTime
 								};
 							} else if (comment.replies && comment.replies.length > 0) {
 								return {
@@ -848,8 +1161,21 @@ const Home: React.FC = () => {
 			return;
 		}
 
+		// Find the post to check if it's a share
+		const post = posts.find(p => p.id === postId);
+		const isShare = post?.isShare || false;
+
 		try {
-			const success = await deleteComment(postId, commentId, currentUser.id);
+			let success;
+			
+			if (isShare) {
+				// Use Share API
+				await deleteShareComment(commentId, currentUser.id);
+				success = true;
+			} else {
+				// Use Poster API
+				success = await deleteComment(postId, commentId, currentUser.id);
+			}
 			
 			if (success) {
 				// Remove comment from state
@@ -904,6 +1230,10 @@ const Home: React.FC = () => {
 			return;
 		}
 
+		// Find the post to check if it's a share
+		const post = posts.find(p => p.id === postId);
+		const isShare = post?.isShare || false;
+
 		const isCurrentlyLiked = userLikedPosts[postId] || false;
 		const currentCount = likeCounts[postId] || 0;
 
@@ -917,19 +1247,42 @@ const Home: React.FC = () => {
 
 		try {
 			let success = false;
-			if (isCurrentlyLiked) {
-				// Unlike
-				success = await unlikePoster(postId, currentUser.id);
-				if (success) {
-					setUserLikedPoster(postId, currentUser.id, false);
-					console.log('✅ Unliked post:', postId);
+			if (isShare) {
+				// Use Share API
+				if (isCurrentlyLiked) {
+					// Unlike share
+					await unlikeShare(postId, currentUser.id);
+					success = true;
+					// Fetch updated count
+					const countResult = await getLikeCountShare(postId);
+					const newCount = typeof countResult === 'number' ? countResult : (countResult as any)?.likeCount || 0;
+					setLikeCounts(prev => ({ ...prev, [postId]: newCount }));
+					console.log('✅ Unliked share:', postId);
+				} else {
+					// Like share
+					const result = await likeShare(postId, { userId: currentUser.id });
+					success = !!result;
+					if (success) {
+						setLikeCounts(prev => ({ ...prev, [postId]: result.likeCount }));
+					}
+					console.log('✅ Liked share:', postId);
 				}
 			} else {
-				// Like
-				success = await likePoster(postId, currentUser.id);
-				if (success) {
-					setUserLikedPoster(postId, currentUser.id, true);
-					console.log('✅ Liked post:', postId);
+				// Use Poster API
+				if (isCurrentlyLiked) {
+					// Unlike poster
+					success = await unlikePoster(postId, currentUser.id);
+					if (success) {
+						setUserLikedPoster(postId, currentUser.id, false);
+						console.log('✅ Unliked post:', postId);
+					}
+				} else {
+					// Like poster
+					success = await likePoster(postId, currentUser.id);
+					if (success) {
+						setUserLikedPoster(postId, currentUser.id, true);
+						console.log('✅ Liked post:', postId);
+					}
 				}
 			}
 
@@ -937,8 +1290,8 @@ const Home: React.FC = () => {
 				// Revert on failure
 				setUserLikedPosts(prev => ({ ...prev, [postId]: isCurrentlyLiked }));
 				setLikeCounts(prev => ({ ...prev, [postId]: currentCount }));
-			} else {
-				// Fetch updated count from server
+			} else if (!isShare) {
+				// Fetch updated count from server (only for poster, share already updated above)
 				const newCount = await getTotalLikes(postId);
 				setLikeCounts(prev => ({ ...prev, [postId]: newCount }));
 			}
@@ -949,6 +1302,102 @@ const Home: React.FC = () => {
 			setLikeCounts(prev => ({ ...prev, [postId]: currentCount }));
 		} finally {
 			setLikingInProgress(prev => ({ ...prev, [postId]: false }));
+		}
+	};
+
+	// Share handlers
+	const handleShareButtonClick = (postId: string) => {
+		const currentUser = currentUserRef.current;
+		if (!currentUser?.id) {
+			alert('Vui lòng đăng nhập để chia sẻ bài viết');
+			return;
+		}
+		setShowShareModal(postId);
+	};
+
+	const handleCreateShare = async (postId: string) => {
+		const currentUser = currentUserRef.current;
+		if (!currentUser?.id) {
+			alert('Vui lòng đăng nhập để chia sẻ bài viết');
+			return;
+		}
+
+		if (!shareContent.trim() && sharePrivacy !== 'PUBLIC') {
+			alert('Vui lòng nhập nội dung chia sẻ');
+			return;
+		}
+
+		setSubmittingShare(true);
+		try {
+			await createShare({
+				posterId: postId,
+				userId: currentUser.id,
+				content: shareContent.trim(),
+				privacyStatusName: sharePrivacy
+			});
+			
+			// Close modal and reset
+			setShowShareModal(null);
+			setShareContent('');
+			setSharePrivacy('PUBLIC');
+			
+			// Update share count
+			const result = await countSharesOfPoster(postId);
+			setShareCounts(prev => ({ ...prev, [postId]: result.shareCount || 0 }));
+			
+			alert('Chia sẻ bài viết thành công!');
+		} catch (error) {
+			console.error('❌ Error creating share:', error);
+			alert('Không thể chia sẻ bài viết. Vui lòng thử lại.');
+		} finally {
+			setSubmittingShare(false);
+		}
+	};
+
+	const handleTogglePostShares = async (postId: string) => {
+		const currentUser = currentUserRef.current;
+		if (!currentUser?.id) {
+			alert('Vui lòng đăng nhập để xem chia sẻ');
+			return;
+		}
+
+		if (showPostShares[postId]) {
+			setShowPostShares(prev => ({ ...prev, [postId]: false }));
+			return;
+		}
+
+		try {
+			// For now, get all shares from feed and filter by posterId
+			// Note: This is not ideal - backend should provide getSharesByPosterId API
+			const allShares = await getShareFeed(currentUser.id);
+			const filteredShares = allShares.filter(share => share.originalPoster.idPoster === postId);
+			setPostShares(prev => ({ ...prev, [postId]: filteredShares }));
+			setShowPostShares(prev => ({ ...prev, [postId]: true }));
+		} catch (error) {
+			console.error('❌ Error loading shares:', error);
+			alert('Không thể tải danh sách chia sẻ');
+		}
+	};
+
+	const handleDeleteShare = async (shareId: string) => {
+		const currentUser = currentUserRef.current;
+		if (!currentUser?.id) {
+			alert('Vui lòng đăng nhập để xóa chia sẻ');
+			return;
+		}
+
+		if (!window.confirm('Bạn có chắc muốn xóa bài chia sẻ này?')) {
+			return;
+		}
+
+		try {
+			await deleteShare(shareId, currentUser.id);
+			// Remove from posts list
+			setPosts(prev => prev.filter(post => post.id !== shareId));
+			alert('Đã xóa bài chia sẻ thành công!');
+		} catch (error) {
+			console.error('❌ Error deleting share:', error);
+			alert('Không thể xóa bài chia sẻ. Vui lòng thử lại.');
 		}
 	};
 
@@ -1252,6 +1701,7 @@ const Home: React.FC = () => {
 									</NavLink>
 									<div>
 										<strong>{post.authorName}</strong>
+										{post.isShare && <span className="share-indicator"> đã chia sẻ một bài viết</span>}
 										<div className="fb-post__meta">
 											<span>{post.time}</span>
 											<span aria-hidden="true">·</span>
@@ -1262,8 +1712,65 @@ const Home: React.FC = () => {
 											</span>
 										</div>
 									</div>
-									<button className="fb-post__more" aria-label="Tùy chọn bài viết">⋯</button>
+									{post.isShare && currentUserRef.current && post.authorId === currentUserRef.current.id && (
+										<button 
+											className="fb-post__delete-share"
+											onClick={() => handleDeleteShare(post.id)}
+											title="Xóa bài chia sẻ"
+										>
+											🗑️
+										</button>
+									)}
+									{!post.isShare && (
+										<button className="fb-post__more" aria-label="Tùy chọn bài viết">⋯</button>
+									)}
 								</header>
+
+							{/* Share content (if this is a share) */}
+							{post.isShare && post.shareContent && (
+								<p className="fb-post__content">{post.shareContent}</p>
+							)}
+
+							{/* Original post (if this is a share) */}
+							{post.isShare && post.originalPosterId ? (
+								<div 
+									className="fb-post__shared-content fb-post__shared-content--clickable"
+									onClick={() => navigate(`/poster/${post.originalPosterId}`)}
+								>
+									<div className="shared-post-header">
+										<img 
+											src={post.originalAuthorAvatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80'} 
+											alt={post.originalAuthorName}
+											className="shared-post-avatar"
+										/>
+										<div>
+											<strong>{post.originalAuthorName}</strong>
+										</div>
+									</div>
+									<p className="shared-post-content">{post.originalContent}</p>
+									{post.originalImages && post.originalImages.length > 0 && (
+										<div className="shared-post-images">
+											{post.originalImages.slice(0, 3).map((img, idx) => (
+												<img key={idx} src={img} alt={`Shared ${idx + 1}`} />
+											))}
+										</div>
+									)}
+									{post.originalVideos && post.originalVideos.length > 0 && (
+										<div className="shared-post-videos">
+											{post.originalVideos.slice(0, 1).map((video, idx) => (
+												<video 
+													key={idx} 
+													src={video.url} 
+													controls 
+													poster={video.thumbnailUrl}
+													onClick={(e) => e.stopPropagation()}
+												/>
+											))}
+										</div>
+									)}
+								</div>
+							) : (
+								<>
 							<p className="fb-post__content">{post.content}</p>
 							
 							{/* Render Images */}
@@ -1363,6 +1870,8 @@ const Home: React.FC = () => {
 									})}
 								</figure>
 							)}
+							</>
+							)}
 							<footer className="fb-post__footer">
 									<div className="fb-post__stats">
 										<span className={likeCounts[post.id] > 0 ? 'has-reactions' : ''}>
@@ -1392,7 +1901,15 @@ const Home: React.FC = () => {
 										>
 											💬 Bình luận
 										</button>
-										<button type="button" className="fb-post__action-btn">↗️ Chia sẻ</button>
+										{!post.isShare && (
+											<button 
+												type="button" 
+												className="fb-post__action-btn"
+												onClick={() => handleShareButtonClick(post.id)}
+											>
+												↗️ Chia sẻ ({shareCounts[post.id] || 0})
+											</button>
+										)}
 										<button 
 											type="button" 
 											onClick={() => navigate(`/poster/${post.id}`)}
@@ -1592,6 +2109,118 @@ const Home: React.FC = () => {
 											)}
 										</div>
 									)}
+
+									{/* Share Modal */}
+									{showShareModal === post.id && (
+										<div className="share-modal-overlay" onClick={() => setShowShareModal(null)}>
+											<div className="share-modal" onClick={(e) => e.stopPropagation()}>
+												<div className="share-modal__header">
+													<h3>Chia sẻ bài viết</h3>
+													<button 
+														type="button" 
+														className="share-modal__close"
+														onClick={() => setShowShareModal(null)}
+													>
+														×
+													</button>
+												</div>
+												<div className="share-modal__body">
+													<div className="share-modal__privacy">
+														<label>Quyền riêng tư:</label>
+														<select 
+															value={sharePrivacy} 
+															onChange={(e) => setSharePrivacy(e.target.value as 'PUBLIC' | 'FRIENDS' | 'PRIVATE')}
+														>
+															<option value="PUBLIC">🌍 Công khai</option>
+															<option value="FRIENDS">👥 Bạn bè</option>
+															<option value="PRIVATE">🔒 Chỉ mình tôi</option>
+														</select>
+													</div>
+													<textarea
+														className="share-modal__textarea"
+														placeholder="Chia sẻ suy nghĩ của bạn..."
+														value={shareContent}
+														onChange={(e) => setShareContent(e.target.value)}
+														rows={4}
+													/>
+													<div className="share-modal__original">
+														<div className="share-original-header">
+															<img src={post.authorAvatar} alt={post.authorName} />
+															<span>{post.authorName}</span>
+														</div>
+														<p>{post.content}</p>
+														{post.images && post.images.length > 0 && (
+															<div className="share-original-images">
+																{post.images.slice(0, 3).map((img, idx) => (
+																	<img key={idx} src={img} alt={`Preview ${idx + 1}`} />
+																))}
+															</div>
+														)}
+													</div>
+												</div>
+												<div className="share-modal__footer">
+													<button 
+														type="button"
+														className="btn-cancel"
+														onClick={() => setShowShareModal(null)}
+														disabled={submittingShare}
+													>
+														Hủy
+													</button>
+													<button 
+														type="button"
+														className="btn-share"
+														onClick={() => handleCreateShare(post.id)}
+														disabled={submittingShare}
+													>
+														{submittingShare ? 'Đang chia sẻ...' : 'Chia sẻ ngay'}
+													</button>
+												</div>
+											</div>
+										</div>
+									)}
+
+									{/* Show Shares Button & Shares List */}
+									
+									{(shareCounts[post.id] || 0) > 0 && (
+										<div className="post-shares-section">
+											{/* <button
+												type="button"
+												className="btn-show-shares"
+												onClick={() => handleTogglePostShares(post.id)}
+											>
+												{showPostShares[post.id] 
+													? `▼ Ẩn ${shareCounts[post.id]} chia sẻ` 
+													: `▶ Xem ${shareCounts[post.id]} chia sẻ`}
+											</button> */}
+											{/* {showPostShares[post.id] && postShares[post.id] && (
+												<div className="post-shares-list">
+													{postShares[post.id].map(share => (
+														<ShareSection
+															key={share.idShare}
+															share={share}
+															onDeleted={() => {
+																// Refresh share count
+																countSharesOfPoster(post.id).then(result => {
+																	setShareCounts(prev => ({ ...prev, [post.id]: result.shareCount || 0 }));
+																});
+																// Remove from list
+																setPostShares(prev => ({
+																	...prev,
+																	[post.id]: prev[post.id].filter(s => s.idShare !== share.idShare)
+																}));
+															}}
+															onShareUpdated={() => {
+																// Refresh shares list
+																handleTogglePostShares(post.id);
+															}}
+														/>
+													))}
+												</div>
+											)} */}
+										</div>
+									)}
+									
 								</footer>
 							</article>
 						))
