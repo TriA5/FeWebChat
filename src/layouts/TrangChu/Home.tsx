@@ -27,6 +27,7 @@ import {
 	deleteShareComment
 } from '../../api/poster/shareApi';
 import ShareSection from './ShareSection';
+import WeatherWidget from '../util/WeatherWidget';
 
 interface Story {
 	id: number;
@@ -1587,6 +1588,9 @@ const Home: React.FC = () => {
 						))}
 					</ul>
 					<Link to="/settings" className="fb-sidebar__more">Xem thêm</Link>
+					
+					{/* Weather Widget */}
+					<WeatherWidget />
 				</aside>
 
 						<section className="fb-feed" aria-label="Bảng tin">
