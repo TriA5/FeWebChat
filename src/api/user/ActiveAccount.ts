@@ -25,7 +25,7 @@ export const activeAccount = async (email: string, activationCode: string): Prom
     console.log('Clean code:', cleanCode);
     
     // Xây dựng URL thủ công, không encode @ trong email
-    const baseUrl = 'http://localhost:8080/user/active-account';
+    const baseUrl = 'http://localhost:8080/api/users/active-account';
     
     // Sử dụng helper function để encode email properly
     const emailForUrl = encodeEmailForUrl(cleanEmail);
