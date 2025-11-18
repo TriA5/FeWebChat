@@ -37,6 +37,7 @@ import {
 import GroupVideoCallInterface from '../../components/videocall/GroupVideoCallInterface';
 import { getClient } from '../../api/websocket/stompClient';
 import './Chat.css';
+import './SensitiveContent.css';
 
 interface Message {
   id: string;
@@ -51,6 +52,14 @@ interface Message {
   fileName?: string;
   fileSize?: number;
   isOwn: boolean;
+  // AI validation fields for image content
+  isSexy?: boolean;
+  sexyScore?: number;
+  pornScore?: number;
+  hentaiScore?: number;
+  topLabel?: string;
+  validationMessage?: string;
+  confidence?: number;
 }
 
 interface ChatRoom {
@@ -158,6 +167,12 @@ const Chat: React.FC = () => {
   const [loadingImages, setLoadingImages] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
   
+  // Sensitive image handling states
+  const [revealedImages, setRevealedImages] = useState<Set<string>>(new Set()); // Track which images user has revealed
+  const [alwaysShowSensitiveContent, setAlwaysShowSensitiveContent] = useState(() => {
+    return localStorage.getItem('alwaysShowSensitiveContent') === 'true';
+  });
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -172,6 +187,41 @@ const Chat: React.FC = () => {
       messagesAreaRef.current.scrollTop = messagesAreaRef.current.scrollHeight;
       hasScrolledToBottomRef.current = true; // Mark as scrolled to bottom
     }
+  };
+
+  // Helper functions for sensitive content handling
+  const shouldBlockImage = (message: Message): boolean => {
+    // Block images with very high score (any type)
+    const maxScore = Math.max(
+      message.sexyScore || 0,
+      message.pornScore || 0,
+      message.hentaiScore || 0
+    );
+    return message.isSexy === true && maxScore > 0.95;
+  };
+
+  const shouldBlurImage = (message: Message): boolean => {
+    // Blur ALL flagged images (sexy/porn/hentai) except blocked ones
+    return message.isSexy === true && !shouldBlockImage(message);
+  };
+
+  const shouldShowWarning = (message: Message): boolean => {
+    // Show warning for any flagged content (sexy/porn/hentai)
+    return message.isSexy === true;
+  };
+
+  const isImageRevealed = (messageId: string): boolean => {
+    return alwaysShowSensitiveContent || revealedImages.has(messageId);
+  };
+
+  const revealImage = (messageId: string) => {
+    setRevealedImages(prev => new Set(prev).add(messageId));
+  };
+
+  const toggleAlwaysShow = () => {
+    const newValue = !alwaysShowSensitiveContent;
+    setAlwaysShowSensitiveContent(newValue);
+    localStorage.setItem('alwaysShowSensitiveContent', String(newValue));
   };
 
   // Chỉ auto scroll khi có tin nhắn MỚI, không scroll khi load more tin nhắn cũ
@@ -305,7 +355,15 @@ const Chat: React.FC = () => {
           fileUrl: m.fileUrl,
           fileName: m.fileName,
           fileSize: m.fileSize,
-          isOwn: m.senderId === myId
+          isOwn: m.senderId === myId,
+          // AI validation fields
+          isSexy: m.isSexy,
+          sexyScore: m.sexyScore,
+          pornScore: m.pornScore,
+          hentaiScore: m.hentaiScore,
+          topLabel: m.topLabel,
+          validationMessage: m.validationMessage,
+          confidence: m.confidence,
         };
       });
       setMessages(transformed);
@@ -396,7 +454,15 @@ const Chat: React.FC = () => {
           fileUrl: m.fileUrl,
           fileName: m.fileName,
           fileSize: m.fileSize,
-          isOwn: m.senderId === myId
+          isOwn: m.senderId === myId,
+          // AI validation fields
+          isSexy: m.isSexy,
+          sexyScore: m.sexyScore,
+          pornScore: m.pornScore,
+          hentaiScore: m.hentaiScore,
+          topLabel: m.topLabel,
+          validationMessage: m.validationMessage,
+          confidence: m.confidence,
         };
       });
       
@@ -1044,6 +1110,15 @@ const Chat: React.FC = () => {
                 if (u) setUserCache(prev => ({ ...prev, [data.senderId]: { name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username || 'Người dùng', avatar: u.avatar } }));
               }).catch(()=>{});
             }
+            // Log warning if image contains sensitive content
+            if (data.messageType === 'IMAGE' && data.isSexy) {
+              console.warn('⚠️ Ảnh nhạy cảm:', data.validationMessage);
+              console.log('📊 Sexy score:', data.sexyScore);
+              console.log('📊 Porn score:', data.pornScore);
+              console.log('📊 Hentai score:', data.hentaiScore);
+              console.log('🏷️ Top label:', data.topLabel);
+            }
+            
             const incoming: Message = {
               id: data.id,
               senderId: data.senderId,
@@ -1057,6 +1132,14 @@ const Chat: React.FC = () => {
               fileName: data.fileName,
               fileSize: data.fileSize,
               isOwn: data.senderId === myId,
+              // AI validation fields
+              isSexy: data.isSexy,
+              sexyScore: data.sexyScore,
+              pornScore: data.pornScore,
+              hentaiScore: data.hentaiScore,
+              topLabel: data.topLabel,
+              validationMessage: data.validationMessage,
+              confidence: data.confidence,
             };
             setMessages(prev => [...prev, incoming]);
             const lastMsgText = incoming.type === 'image'
@@ -1082,6 +1165,15 @@ const Chat: React.FC = () => {
                   if (u) setUserCache(prev => ({ ...prev, [data.senderId]: { name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username || 'Người dùng', avatar: u.avatar } }));
                 }).catch(()=>{});
               }
+              // Log warning if image contains sensitive content
+              if (data.messageType === 'IMAGE' && data.isSexy) {
+                console.warn('⚠️ Ảnh nhạy cảm (group):', data.validationMessage);
+                console.log('📊 Sexy score:', data.sexyScore);
+                console.log('📊 Porn score:', data.pornScore);
+                console.log('📊 Hentai score:', data.hentaiScore);
+                console.log('🏷️ Top label:', data.topLabel);
+              }
+              
               const incoming: Message = {
                 id: data.id,
                 senderId: data.senderId,
@@ -1095,6 +1187,14 @@ const Chat: React.FC = () => {
                 fileName: data.fileName,
                 fileSize: data.fileSize,
                 isOwn: data.senderId === myId,
+                // AI validation fields
+                isSexy: data.isSexy,
+                sexyScore: data.sexyScore,
+                pornScore: data.pornScore,
+                hentaiScore: data.hentaiScore,
+                topLabel: data.topLabel,
+                validationMessage: data.validationMessage,
+                confidence: data.confidence,
               };
               setMessages(prev => [...prev, incoming]);
               const lastMsgText = incoming.type === 'image'
@@ -1921,12 +2021,66 @@ const Chat: React.FC = () => {
                     <div className="message-bubble-wrapper">
                       <div className="message-bubble">
                         {message.type === 'image' && message.imageUrl ? (
-                          <img 
-                            src={message.imageUrl} 
-                            alt="Attachment" 
-                            className="message-image"
-                            onClick={() => window.open(message.imageUrl, '_blank')}
-                          />
+                          <>
+                            {/* Completely block image if score is too high */}
+                            {shouldBlockImage(message) ? (
+                              <div className="blocked-image-container">
+                                <div className="blocked-image-icon">🚫</div>
+                                <div className="blocked-image-text">
+                                  <strong>Ảnh vi phạm chính sách</strong>
+                                  <p>Nội dung không phù hợp</p>
+                                  <p style={{ fontSize: '0.85rem', marginTop: '4px' }}>
+                                    {message.topLabel}: {((Math.max(
+                                      message.sexyScore || 0,
+                                      message.pornScore || 0,
+                                      message.hentaiScore || 0
+                                    )) * 100).toFixed(1)}%
+                                  </p>
+                                </div>
+                              </div>
+                            ) : shouldBlurImage(message) && !isImageRevealed(message.id) ? (
+                              /* Show blurred image with click to reveal for ALL sexy images */
+                              <div className="sensitive-image-container">
+                                {shouldShowWarning(message) && (
+                                  <div className="sensitive-warning-badge">
+                                    ⚠️ Nội dung nhạy cảm
+                                    <span className="warning-score">
+                                      {message.topLabel} ({((message.confidence || 0) * 100).toFixed(0)}%)
+                                    </span>
+                                  </div>
+                                )}
+                                <div className="blurred-image-wrapper">
+                                  <img 
+                                    src={message.imageUrl} 
+                                    alt="Attachment" 
+                                    className="message-image blurred"
+                                  />
+                                  <div className="reveal-overlay">
+                                    <button 
+                                      className="reveal-btn"
+                                      onClick={() => revealImage(message.id)}
+                                    >
+                                      👁️ Nhấn để xem ảnh
+                                    </button>
+                                    <div className="warning-text">
+                                      {message.validationMessage || 'Ảnh có nội dung nhạy cảm'}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              /* Show normal image or revealed image */
+                              <div className="normal-image-container">
+                                <img 
+                                  src={message.imageUrl} 
+                                  alt="Attachment" 
+                                  className="message-image"
+                                  onClick={() => window.open(message.imageUrl, '_blank')}
+                                  style={{ cursor: 'zoom-in' }}
+                                />
+                              </div>
+                            )}
+                          </>
                         ) : message.type === 'file' && message.fileUrl && isVideoFile(message.fileName, message.fileUrl) ? (
                           <video
                             className="message-video"

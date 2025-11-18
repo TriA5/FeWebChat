@@ -16,6 +16,14 @@ export interface ChatMessageDTO {
   fileName?: string;
   fileSize?: number;
   createdAt: string;
+  // AI validation fields for image content
+  isSexy?: boolean;
+  sexyScore?: number;
+  pornScore?: number;
+  hentaiScore?: number;
+  topLabel?: string;
+  validationMessage?: string;
+  confidence?: number;
 }
 export interface GroupConversationDTO {
   id: string;
