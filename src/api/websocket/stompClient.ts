@@ -14,7 +14,7 @@ function createClient() {
   
   client = new Client({
     brokerURL: undefined, // We'll use webSocketFactory instead
-    webSocketFactory: () => new SockJS(`http://localhost:8082/ws`) as any,
+    webSocketFactory: () => new SockJS(`https://unpessimistically-unbewailed-christy.ngrok-free.dev/api/ws`) as any,
     reconnectDelay: 5000,
     heartbeatIncoming: 4000,
     heartbeatOutgoing: 4000,

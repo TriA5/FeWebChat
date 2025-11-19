@@ -174,7 +174,7 @@ const ProfileDetail: React.FC = () => {
       if (!id) return;
       try {
         const res = await axios.get<UserDetail>(
-          `http://localhost:8080/api/users/search/findByIdUser?IdUser=${id}`
+          `https://unpessimistically-unbewailed-christy.ngrok-free.dev/api/users/search/findByIdUser?IdUser=${id}`
         );
         setUser(res.data);
         

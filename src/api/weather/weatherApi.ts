@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8080/api/weathers';
+const API_BASE_URL = 'https://unpessimistically-unbewailed-christy.ngrok-free.dev/api/weathers';
 
 export interface WeatherData {
   coord?: {

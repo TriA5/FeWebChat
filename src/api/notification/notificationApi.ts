@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8080/api/notifications';
-const USER_API_BASE_URL = 'http://localhost:8080/api/users';
+const API_BASE_URL = 'https://unpessimistically-unbewailed-christy.ngrok-free.dev/api/notifications';
+const USER_API_BASE_URL = 'https://unpessimistically-unbewailed-christy.ngrok-free.dev/api/users';
 
 // Interface cho Notification - khớp với backend
 export interface NotificationDTO {
