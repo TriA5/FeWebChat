@@ -6,6 +6,8 @@ import { getUserInfo } from '../../api/user/loginApi';
 import { connect, subscribe } from '../../api/websocket/stompClient';
 import type { StompSubscription } from '@stomp/stompjs';
 import ImageViewer from '../../components/ImageViewer';
+import { getFriendsList } from '../../api/user/friendshipApi';
+import { listGroups, listConversations } from '../../api/chat/chatApi';
 import { likePoster, unlikePoster, getTotalLikes, checkUserLikedPoster, setUserLikedPoster } from '../../api/poster/likeApi';
 import { getCommentsByPosterId, formatCommentTime, countTotalComments, createComment, replyToComment, updateComment, deleteComment, type Comment } from '../../api/poster/commentApi';
 import { getUserById } from '../../api/user/userApi';
@@ -116,6 +118,14 @@ const shortcuts = [
 	{ id: 5, label: 'Marketplace', icon: '🛒' },
 ];
 
+interface Contact {
+	id: string;
+	name: string;
+	avatar?: string;
+	active: boolean;
+	type: 'friend' | 'group';
+}
+
 const contacts = [
 	{ id: 1, name: 'Lan Nguyễn', avatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=80&q=80', active: true },
 	{ id: 2, name: 'Trí A5', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80', active: true },
@@ -183,14 +193,113 @@ const Home: React.FC = () => {
 	// Use ref for WebSocket subscriptions to prevent re-subscription
 	const subscriptionsRef = useRef<StompSubscription[]>([]);
 	const currentUserRef = useRef<any>(null);
+	
+	// Contacts state (friends and groups)
+	const [dynamicContacts, setDynamicContacts] = useState<Contact[]>([]);
+	const [loadingContacts, setLoadingContacts] = useState(true);
 
 	// Helper function to get full name
 	const getFullName = (poster: any): string => {
 		if (poster.userFirstName && poster.userLastName) {
-			return ` ${poster.userFirstName} ${poster.userLastName}`;
+			return `${poster.userFirstName} ${poster.userLastName}`;
 		}
 		return poster.userName || 'Người dùng';
 	};
+
+	// Load friends and groups
+	const loadContacts = useCallback(async () => {
+			try {
+				const me = getUserInfo();
+				if (!me?.id) {
+					setLoadingContacts(false);
+					return;
+				}
+
+			const contactsList: Contact[] = [];
+			const addedIds = new Set<string>(); // Track added contacts to avoid duplicates
+
+			// Load conversations (people you chat with)
+			try {
+				const convs = await listConversations(me.id);
+				if (convs && convs.length > 0) {
+					for (const conv of convs) {
+						const otherUserId = conv.participant1Id === me.id ? conv.participant2Id : conv.participant1Id;
+						
+						if (!addedIds.has(otherUserId)) {
+							try {
+								const userData = await getUserById(otherUserId);
+								if (userData) {
+									const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.username || 'Người dùng';
+									contactsList.push({
+										id: otherUserId,
+										name: fullName,
+										avatar: userData.avatar,
+										active: Math.random() > 0.5,
+										type: 'friend'
+									});
+									addedIds.add(otherUserId);
+								}
+							} catch (err) {
+								console.error('Failed to load user:', otherUserId, err);
+							}
+						}
+					}
+				}
+			} catch (err) {
+				console.error('Failed to load conversations:', err);
+			}
+
+			// Load friends (skip if already added from conversations)
+			try {
+				const friends = await getFriendsList();
+				if (friends && friends.length > 0) {
+					friends.forEach((friend: any) => {
+						const friendId = friend.userId === me.id ? friend.friendId : friend.userId;
+						const friendData = friend.userId === me.id ? friend.friend : friend.user;
+						
+						if (friendData && friendId && !addedIds.has(friendId)) {
+							const fullName = `${friendData.firstName || ''} ${friendData.lastName || ''}`.trim() || friendData.username || 'Bạn bè';
+							contactsList.push({
+								id: friendId,
+								name: fullName,
+								avatar: friendData.avatar,
+								active: Math.random() > 0.5,
+								type: 'friend'
+							});
+							addedIds.add(friendId);
+						}
+					});
+				}
+			} catch (err) {
+				console.error('Failed to load friends:', err);
+			}
+
+			// Load groups
+			try {
+				const groups = await listGroups(me.id);
+				if (groups && groups.length > 0) {
+					groups.forEach((group: any) => {
+						contactsList.push({
+							id: group.id,
+							name: group.groupName || 'Nhóm',
+							avatar: undefined,
+							active: false,
+							type: 'group'
+						});
+					});
+				}
+			} catch (err) {
+				console.error('Failed to load groups:', err);
+			}
+
+			console.log('📝 Loaded contacts:', contactsList.length, contactsList);
+			setDynamicContacts(contactsList);
+			setLoadingContacts(false);
+		} catch (error) {
+			console.error('Error loading contacts:', error);
+			setLoadingContacts(false);
+		}
+	}, []);
 
 	// Helper function to convert PosterDTO to Post
 	const convertPosterToPost = useCallback((poster: any, index?: number): Post => {
@@ -527,7 +636,8 @@ const Home: React.FC = () => {
 	useEffect(() => {
 		fetchPosts(0);
 		setPage(0);
-	}, [fetchPosts]);
+		loadContacts(); // Load friends and groups
+	}, [fetchPosts, loadContacts]);
 
 	// Intersection Observer for infinite scroll
 	useEffect(() => {
@@ -1594,7 +1704,7 @@ const Home: React.FC = () => {
 				</aside>
 
 						<section className="fb-feed" aria-label="Bảng tin">
-							<div className="fb-stories-wrapper">
+							{/* <div className="fb-stories-wrapper">
 								<button
 									type="button"
 									className="fb-stories__nav prev"
@@ -1634,7 +1744,7 @@ const Home: React.FC = () => {
 								>
 									›
 								</button>
-					</div>
+					</div> */}
 
 				<section className="fb-composer" aria-label="Tạo bài viết">
 					<div className="fb-composer__top">
@@ -2247,18 +2357,128 @@ const Home: React.FC = () => {
 				</section>
 
 				<aside className="fb-rightbar" aria-label="Liên hệ">
-					<h3>Người liên hệ</h3>
-					<ul>
-						{contacts.map(contact => (
-							<li key={contact.id}>
-								<div className="avatar">
-									<img src={contact.avatar} alt={contact.name} />
-									<span className={contact.active ? 'status active' : 'status'} aria-hidden="true" />
-								</div>
-								<span>{contact.name}</span>
-							</li>
-						))}
-					</ul>
+					<div style={{ 
+						display: 'flex', 
+						justifyContent: 'space-between', 
+						alignItems: 'center',
+						marginBottom: '12px'
+					}}>
+						<h3 style={{ margin: 0 }}>Người liên hệ</h3>
+						{!loadingContacts && dynamicContacts.length > 0 && (
+							<span style={{ 
+								fontSize: '0.85rem', 
+								color: '#65676b',
+								fontWeight: '500'
+							}}>
+								{dynamicContacts.filter(c => c.type === 'friend').length} bạn bè, {dynamicContacts.filter(c => c.type === 'group').length} nhóm
+							</span>
+						)}
+					</div>
+					{loadingContacts ? (
+						<div style={{ textAlign: 'center', padding: '20px', color: '#65676b' }}>
+							<p>Đang tải...</p>
+						</div>
+					) : dynamicContacts.length === 0 ? (
+						<div style={{ textAlign: 'center', padding: '20px', color: '#65676b' }}>
+							<p>Chưa có liên hệ</p>
+							<p style={{ fontSize: '0.85rem', marginTop: '8px' }}>Hãy kết bạn hoặc tham gia nhóm để bắt đầu chat!</p>
+						</div>
+					) : (
+						<>
+							{/* Friends Section */}
+							{dynamicContacts.filter(c => c.type === 'friend').length > 0 && (
+								<>
+									<div style={{ 
+										fontSize: '0.8rem', 
+										color: '#65676b', 
+										fontWeight: '600',
+										marginTop: '16px',
+										marginBottom: '8px',
+										textTransform: 'uppercase',
+										letterSpacing: '0.5px'
+									}}>
+										Bạn bè ({dynamicContacts.filter(c => c.type === 'friend').length})
+									</div>
+									<ul style={{ marginBottom: '16px' }}>
+										{dynamicContacts.filter(c => c.type === 'friend').map(contact => (
+											<li 
+												key={contact.id}
+												onClick={() => navigate('/chat')}
+												style={{ cursor: 'pointer' }}
+												title={`Chat với ${contact.name}`}
+											>
+												<div className="avatar">
+													{contact.avatar ? (
+														<img src={contact.avatar} alt={contact.name} />
+													) : (
+														<div style={{
+															width: '36px',
+															height: '36px',
+															borderRadius: '50%',
+															background: '#e4e6eb',
+															display: 'flex',
+															alignItems: 'center',
+															justifyContent: 'center',
+															fontSize: '1rem',
+															fontWeight: 'bold',
+															color: '#65676b'
+														}}>
+															{contact.name.charAt(0).toUpperCase()}
+														</div>
+													)}
+													<span className={contact.active ? 'status active' : 'status'} aria-hidden="true" />
+												</div>
+												<span>{contact.name}</span>
+											</li>
+										))}
+									</ul>
+								</>
+							)}
+
+							{/* Groups Section */}
+							{dynamicContacts.filter(c => c.type === 'group').length > 0 && (
+								<>
+									<div style={{ 
+										fontSize: '0.8rem', 
+										color: '#65676b', 
+										fontWeight: '600',
+										marginTop: '16px',
+										marginBottom: '8px',
+										textTransform: 'uppercase',
+										letterSpacing: '0.5px'
+									}}>
+										Nhóm ({dynamicContacts.filter(c => c.type === 'group').length})
+									</div>
+									<ul>
+										{dynamicContacts.filter(c => c.type === 'group').map(contact => (
+											<li 
+												key={contact.id}
+												onClick={() => navigate('/chat')}
+												style={{ cursor: 'pointer' }}
+												title={`Chat nhóm ${contact.name}`}
+											>
+												<div className="avatar">
+													<div style={{
+														width: '36px',
+														height: '36px',
+														borderRadius: '50%',
+														background: '#1877f2',
+														display: 'flex',
+														alignItems: 'center',
+														justifyContent: 'center',
+														fontSize: '1.2rem'
+													}}>
+														👥
+													</div>
+												</div>
+												<span>{contact.name}</span>
+											</li>
+										))}
+									</ul>
+								</>
+							)}
+						</>
+					)}
 					<div className="fb-rightbar__download">
 						<p>Tải ChatWeb cho máy tính để trò chuyện nhanh hơn.</p>
 						<a href="https://www.microsoft.com/store/apps" target="_blank" rel="noreferrer noopener">Tải ứng dụng</a>
