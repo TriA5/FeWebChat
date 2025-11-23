@@ -136,6 +136,7 @@ const VideoCallInterface: React.FC<VideoCallInterfaceProps> = ({
                   autoPlay
                   playsInline
                   className="remote-video"
+                  style={{ width: '85%' }}
                 />
                 <audio ref={remoteAudioRef} autoPlay playsInline />
               </>

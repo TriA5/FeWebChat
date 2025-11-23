@@ -1567,10 +1567,12 @@
   background: #f3f4f6;
   cursor: pointer;
   transition: transform 0.2s;
+  display: flex;
+  flex-direction: column;
 }
 
 .image-item:hover {
-  transform: scale(1.05);
+  transform: scale(1.02);
 }
 
 .image-item img {

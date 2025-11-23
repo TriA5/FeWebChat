@@ -2475,19 +2475,88 @@ const Chat: React.FC = () => {
               ) : conversationImages.length === 0 ? (
                 <div className="empty-hint">Chưa có ảnh nào trong cuộc trò chuyện này</div>
               ) : (
-                conversationImages.map((msg) => (
-                  <div key={msg.id} className="image-item">
-                    <img 
-                      src={msg.imageUrl} 
-                      alt="Chat attachment"
-                      onClick={() => window.open(msg.imageUrl, '_blank')}
-                    />
-                    <div className="image-info">
-                      <span className="image-sender">{getSenderName(msg.sender)}</span>
-                      <span className="image-time">{formatMessageTime(new Date(msg.createdAt))}</span>
+                conversationImages.map((msg) => {
+                  const maxScore = Math.max(
+                    msg.sexyScore || 0,
+                    msg.pornScore || 0,
+                    msg.hentaiScore || 0
+                  );
+                  const isBlocked = msg.isSexy === true && maxScore > 0.95;
+                  const isBlurred = msg.isSexy === true && !isBlocked;
+                  const isRevealed = isImageRevealed(msg.id);
+
+                  return (
+                    <div key={msg.id} className="image-item">
+                      {isBlocked ? (
+                        // Blocked image
+                        <div className="blocked-image-container" style={{ minHeight: '200px' }}>
+                          <div className="blocked-image-icon">🚫</div>
+                          <div className="blocked-image-text">
+                            <strong>Ảnh vi phạm</strong>
+                            <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>
+                              {msg.topLabel}: {(maxScore * 100).toFixed(1)}%
+                            </p>
+                          </div>
+                        </div>
+                      ) : isBlurred && !isRevealed ? (
+                        // Blurred image with click to reveal
+                        <div className="sensitive-image-container">
+                          {msg.isSexy && (
+                            <div className="sensitive-warning-badge">
+                              ⚠️ Nhạy cảm
+                            </div>
+                          )}
+                          <div className="blurred-image-wrapper">
+                            <img 
+                              src={msg.imageUrl} 
+                              alt="Chat attachment"
+                              className="blurred"
+                              style={{ width: '100%', height: '200px', objectFit: 'cover' }}
+                            />
+                            <div className="reveal-overlay">
+                              <button 
+                                className="reveal-btn"
+                                onClick={() => revealImage(msg.id)}
+                              >
+                                👁️ Xem
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        // Normal or revealed image
+                        <>
+                          {msg.isSexy && !isRevealed && (
+                            <div className="sensitive-warning-badge" style={{ position: 'absolute', top: '8px', left: '8px', zIndex: 1 }}>
+                              ⚠️
+                            </div>
+                          )}
+                          <img 
+                            src={msg.imageUrl} 
+                            alt="Chat attachment"
+                            onClick={() => {
+                              if (msg.isSexy && !isRevealed) {
+                                revealImage(msg.id);
+                              } else {
+                                window.open(msg.imageUrl, '_blank');
+                              }
+                            }}
+                            style={{ 
+                              cursor: msg.isSexy && !isRevealed ? 'pointer' : 'zoom-in',
+                              width: '100%',
+                              height: '200px',
+                              objectFit: 'cover'
+                            }}
+                          />
+                        </>
+                      )}
+                      <div className="image-info">
+                        <span className="image-sender">{getSenderName(msg.sender)}</span>
+                        <span className="image-time">{formatMessageTime(new Date(msg.createdAt))}</span>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
