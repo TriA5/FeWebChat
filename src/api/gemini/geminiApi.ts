@@ -72,3 +72,33 @@ export const validatePrompt = (prompt: string): string | null => {
   
   return null;
 };
+
+/**
+ * Kiểm tra nội dung có toxic hay không bằng endpoint check-toxic
+ * @param text Nội dung cần kiểm tra
+ */
+export const checkToxic = async (text: string): Promise<{ toxic: boolean; message?: string }> => {
+  try {
+    const token = getToken();
+    const response = await fetch(`${API_BASE_URL}/gemini/check-toxic`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` })
+      },
+      body: JSON.stringify({ text })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    const json = await response.json();
+    // Expecting { toxic: boolean, message: string }
+    return { toxic: !!json.toxic, message: json.message };
+  } catch (error) {
+    console.error('checkToxic error:', error);
+    throw error;
+  }
+};

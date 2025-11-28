@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import './CreatePoster.css';
 import { createPoster } from '../../api/poster/posterApi';
 import { getUserInfo } from '../../api/user/loginApi';
+import { checkToxic, validatePrompt, askGemini } from '../../api/gemini/geminiApi';
 
 const CreatePoster: React.FC = () => {
 	const navigate = useNavigate();
@@ -14,6 +15,9 @@ const CreatePoster: React.FC = () => {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState('');
 	const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+	const [aiLoading, setAiLoading] = useState(false);
+	const [aiMessage, setAiMessage] = useState<string | null>(null);
+	const [aiToxic, setAiToxic] = useState<boolean | null>(null);
 	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
 	const currentUser = getUserInfo();
@@ -174,6 +178,45 @@ const CreatePoster: React.FC = () => {
 		}
 	};
 
+	// Handle Ask AI button: generate content based on user prompt
+	const handleAskAI = async () => {
+		// validate content first
+		const v = validatePrompt(content);
+		if (v) {
+			setError(v);
+			return;
+		}
+
+		try {
+			setAiLoading(true);
+			setAiMessage(null);
+			setAiToxic(null);
+			setError('');
+
+			// Use askGemini instead of checkToxic to generate content
+			const aiResponse = await askGemini(content);
+			// console.log('🤖 AI Generated:', aiResponse);
+			
+			// Insert AI response into textarea
+			setContent(prev => {
+				// If current content looks like a prompt, replace it; otherwise append
+				if (prev.trim().length < 100) {
+					return aiResponse;
+				}
+				return `${prev}\n\n${aiResponse}`;
+			});
+			
+			setAiToxic(false);
+			setAiMessage('AI đã tạo nội dung và thêm vào bài viết của bạn.');
+			console.log('✅ Content generated successfully');
+		} catch (err: any) {
+			console.error('Ask AI error', err);
+			setError(`Lỗi khi gọi AI: ${err.message || 'Vui lòng thử lại.'}`);
+		} finally {
+			setAiLoading(false);
+		}
+	};
+
 	return (
 		<div className="create-poster">
 			{/* Loading Overlay khi đang đăng */}
@@ -255,7 +298,25 @@ const CreatePoster: React.FC = () => {
 						value={content}
 						onChange={(e) => setContent(e.target.value)}
 						rows={8}
+						ref={textareaRef}
 					/>
+
+					{/* AI Result Box (shown after asking AI) */}
+					{aiMessage && (
+						<div className={`create-poster__ai-box ${aiToxic ? 'ai-toxic' : 'ai-safe'}`} role="status">
+							{aiToxic ? (
+								<>
+									<strong>⚠️ Cảnh báo từ AI:</strong>
+									<p>{aiMessage}</p>
+								</>
+							) : (
+								<>
+									<strong>✅ Phản hồi từ AI:</strong>
+									<p>{aiMessage}</p>
+								</>
+							)}
+						</div>
+					)}
 
 					{/* Image/Video Previews */}
 					{previews.length > 0 && (
@@ -303,6 +364,16 @@ const CreatePoster: React.FC = () => {
 							onClick={() => setShowEmojiPicker(prev => !prev)}
 						>
 							😊 Cảm xúc
+						</button>
+
+						<button
+							type="button"
+							className="create-poster__action-btn"
+							onClick={handleAskAI}
+							disabled={aiLoading || !content.trim()}
+							aria-label="Hỏi AI kiểm tra nội dung"
+						>
+							{aiLoading ? 'Đang hỏi AI...' : '🤖 Hỏi AI'}
 						</button>
 						<span className="create-poster__action-btn">📍 Vị trí</span>
 					</div>

@@ -197,6 +197,9 @@ const Home: React.FC = () => {
 	// Contacts state (friends and groups)
 	const [dynamicContacts, setDynamicContacts] = useState<Contact[]>([]);
 	const [loadingContacts, setLoadingContacts] = useState(true);
+	
+	// Expand content state
+	const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({});
 
 	// Helper function to get full name
 	const getFullName = (poster: any): string => {
@@ -1704,7 +1707,7 @@ const Home: React.FC = () => {
 				</aside>
 
 						<section className="fb-feed" aria-label="Bảng tin">
-							{/* <div className="fb-stories-wrapper">
+							<div className="fb-stories-wrapper">
 								<button
 									type="button"
 									className="fb-stories__nav prev"
@@ -1744,7 +1747,7 @@ const Home: React.FC = () => {
 								>
 									›
 								</button>
-					</div> */}
+					</div>
 
 				<section className="fb-composer" aria-label="Tạo bài viết">
 					<div className="fb-composer__top">
@@ -1813,7 +1816,7 @@ const Home: React.FC = () => {
 									<NavLink to={`/user/${post.authorId}`} className="fb-post__author">
 										<img src={post.authorAvatar} alt={`Ảnh đại diện của ${post.authorName}`} />
 									</NavLink>
-									<div>
+									<div style={{textAlign:"left"}}>
 										<strong>{post.authorName}</strong>
 										{post.isShare && <span className="share-indicator"> đã chia sẻ một bài viết</span>}
 										<div className="fb-post__meta">
@@ -1885,7 +1888,20 @@ const Home: React.FC = () => {
 								</div>
 							) : (
 								<>
-							<p className="fb-post__content">{post.content}</p>
+							<div className="fb-post__content-wrapper">
+								<p className={`fb-post__content ${expandedPosts[post.id] ? 'expanded' : ''}`}>
+									{post.content}
+								</p>
+								{post.content && post.content.length > 200 && (
+									<button 
+										type="button"
+										className="fb-post__see-more"
+										onClick={() => setExpandedPosts(prev => ({ ...prev, [post.id]: !prev[post.id] }))}
+									>
+										{expandedPosts[post.id] ? 'Ẩn bớt' : 'Xem thêm'}
+									</button>
+								)}
+							</div>
 							
 							{/* Render Images */}
 							{post.images && post.images.length > 0 && (

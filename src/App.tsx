@@ -20,6 +20,10 @@ import HeaderHome from "./layouts/page/layout/HeaderHome";
 import GeminiChat from "./layouts/gemini/GeminiChat";
 import NotificationPage from "./layouts/util/NotificationPage";
 
+// Lazy loaded pages (keep import declarations at the top)
+const LazyForgotPassword = React.lazy(() => import('./layouts/user/ForgotPassword'));
+const LazyChangePassword = React.lazy(() => import('./layouts/user/ChangePassword'));
+
 const PublicLayout: React.FC = () => {
   return (
     <>
@@ -46,6 +50,7 @@ function App() {
       <Routes>
         <Route element={<PublicLayout />}>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<React.Suspense fallback={<div>Loading...</div>}><LazyForgotPassword /></React.Suspense>} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/" element={<HomePage />} />
         </Route>
@@ -69,6 +74,16 @@ function App() {
             element={
               <RequireAuth>
                 <CreatePoster />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/change-password"
+            element={
+              <RequireAuth>
+                <React.Suspense fallback={<div>Loading...</div>}>
+                  <LazyChangePassword />
+                </React.Suspense>
               </RequireAuth>
             }
           />

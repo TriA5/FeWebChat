@@ -102,6 +102,16 @@ const HeaderHome: React.FC = () => {
                 <button
                   type="button"
                   className="fb-header__dropdown-item fb-header__dropdown-item--danger"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    navigate('/change-password');
+                  }}
+                >
+                  Đổi mật khẩu
+                </button>
+                <button
+                  type="button"
+                  className="fb-header__dropdown-item fb-header__dropdown-item--danger"
                   onClick={handleLogout}
                 >
                   Đăng xuất

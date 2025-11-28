@@ -42,3 +42,68 @@ export async function searchUserByPhone(phoneNumber: string): Promise<BasicUserD
   if (!res.ok) throw new Error(await res.text() || 'Không tìm thấy người dùng');
   return res.json();
 }
+
+export async function changePassword(idUser: string, newPassword: string): Promise<any> {
+  if (!idUser) throw new Error('User id is required');
+  const token = getToken();
+  if (!token) throw new Error('No JWT token found');
+
+  // Single PUT endpoint: /users/change-password
+  const url = `${API_BASE_URL}/users/change-password`;
+
+  const headers = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  };
+
+  // Helper to process Response -> object or throw
+  const process = async (res: Response) => {
+    const text = await res.text();
+    if (!res.ok) {
+      const serverMsg = text && text.trim() ? text : undefined;
+      throw new Error(serverMsg || `Failed to change password (status ${res.status})`);
+    }
+    if (!text || text.trim() === '') return { success: true };
+    try { return JSON.parse(text); } catch { return { message: text }; }
+  };
+
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ idUser, newPassword })
+  });
+
+  return await process(res);
+}
+
+export async function forgotPassword(email: string): Promise<any> {
+  if (!email) throw new Error('Email is required');
+  const token = getToken();
+  // It's OK if no token is present for public endpoints; include if available
+  const headers: Record<string,string> = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE_URL}/users/forgot-password`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ email })
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    const serverMsg = text && text.trim() ? text : undefined;
+    throw new Error(serverMsg || 'Failed to request password reset');
+  }
+
+  if (!text || text.trim() === '') return { success: true };
+
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return { message: text };
+  }
+}
