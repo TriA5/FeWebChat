@@ -1,7 +1,7 @@
 {
   "files": {
     "main.css": "/FeWebChat/static/css/main.faf4683e.css",
-    "main.js": "/FeWebChat/static/js/main.34be9f90.js",
+    "main.js": "/FeWebChat/static/js/main.d1677d0d.js",
     "static/css/740.9a384fef.chunk.css": "/FeWebChat/static/css/740.9a384fef.chunk.css",
     "static/js/740.febd0112.chunk.js": "/FeWebChat/static/js/740.febd0112.chunk.js",
     "static/css/460.378c384d.chunk.css": "/FeWebChat/static/css/460.378c384d.chunk.css",
@@ -11,7 +11,7 @@
     "static/media/bootstrap-icons.woff2?": "/FeWebChat/static/media/bootstrap-icons.92ea18a81d737146ff04.woff2",
     "index.html": "/FeWebChat/index.html",
     "main.faf4683e.css.map": "/FeWebChat/static/css/main.faf4683e.css.map",
-    "main.34be9f90.js.map": "/FeWebChat/static/js/main.34be9f90.js.map",
+    "main.d1677d0d.js.map": "/FeWebChat/static/js/main.d1677d0d.js.map",
     "740.9a384fef.chunk.css.map": "/FeWebChat/static/css/740.9a384fef.chunk.css.map",
     "740.febd0112.chunk.js.map": "/FeWebChat/static/js/740.febd0112.chunk.js.map",
     "460.378c384d.chunk.css.map": "/FeWebChat/static/css/460.378c384d.chunk.css.map",
@@ -20,6 +20,6 @@
   },
   "entrypoints": [
     "static/css/main.faf4683e.css",
-    "static/js/main.34be9f90.js"
+    "static/js/main.d1677d0d.js"
   ]
 }
