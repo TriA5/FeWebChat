@@ -1,25 +1,25 @@
 {
   "files": {
-    "main.css": "/static/css/main.8836d546.css",
-    "main.js": "/static/js/main.7ac6fd59.js",
-    "static/css/740.9a384fef.chunk.css": "/static/css/740.9a384fef.chunk.css",
-    "static/js/740.febd0112.chunk.js": "/static/js/740.febd0112.chunk.js",
-    "static/css/460.378c384d.chunk.css": "/static/css/460.378c384d.chunk.css",
-    "static/js/460.f8bae615.chunk.js": "/static/js/460.f8bae615.chunk.js",
-    "static/js/453.58d80086.chunk.js": "/static/js/453.58d80086.chunk.js",
-    "static/media/bootstrap-icons.woff?": "/static/media/bootstrap-icons.1295669cd4e305c97f2c.woff",
-    "static/media/bootstrap-icons.woff2?": "/static/media/bootstrap-icons.92ea18a81d737146ff04.woff2",
-    "index.html": "/index.html",
-    "main.8836d546.css.map": "/static/css/main.8836d546.css.map",
-    "main.7ac6fd59.js.map": "/static/js/main.7ac6fd59.js.map",
-    "740.9a384fef.chunk.css.map": "/static/css/740.9a384fef.chunk.css.map",
-    "740.febd0112.chunk.js.map": "/static/js/740.febd0112.chunk.js.map",
-    "460.378c384d.chunk.css.map": "/static/css/460.378c384d.chunk.css.map",
-    "460.f8bae615.chunk.js.map": "/static/js/460.f8bae615.chunk.js.map",
-    "453.58d80086.chunk.js.map": "/static/js/453.58d80086.chunk.js.map"
+    "main.css": "/FeWebChat/static/css/main.faf4683e.css",
+    "main.js": "/FeWebChat/static/js/main.924fa59c.js",
+    "static/css/740.9a384fef.chunk.css": "/FeWebChat/static/css/740.9a384fef.chunk.css",
+    "static/js/740.febd0112.chunk.js": "/FeWebChat/static/js/740.febd0112.chunk.js",
+    "static/css/460.378c384d.chunk.css": "/FeWebChat/static/css/460.378c384d.chunk.css",
+    "static/js/460.f8bae615.chunk.js": "/FeWebChat/static/js/460.f8bae615.chunk.js",
+    "static/js/453.58d80086.chunk.js": "/FeWebChat/static/js/453.58d80086.chunk.js",
+    "static/media/bootstrap-icons.woff?": "/FeWebChat/static/media/bootstrap-icons.1295669cd4e305c97f2c.woff",
+    "static/media/bootstrap-icons.woff2?": "/FeWebChat/static/media/bootstrap-icons.92ea18a81d737146ff04.woff2",
+    "index.html": "/FeWebChat/index.html",
+    "main.faf4683e.css.map": "/FeWebChat/static/css/main.faf4683e.css.map",
+    "main.924fa59c.js.map": "/FeWebChat/static/js/main.924fa59c.js.map",
+    "740.9a384fef.chunk.css.map": "/FeWebChat/static/css/740.9a384fef.chunk.css.map",
+    "740.febd0112.chunk.js.map": "/FeWebChat/static/js/740.febd0112.chunk.js.map",
+    "460.378c384d.chunk.css.map": "/FeWebChat/static/css/460.378c384d.chunk.css.map",
+    "460.f8bae615.chunk.js.map": "/FeWebChat/static/js/460.f8bae615.chunk.js.map",
+    "453.58d80086.chunk.js.map": "/FeWebChat/static/js/453.58d80086.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.8836d546.css",
-    "static/js/main.7ac6fd59.js"
+    "static/css/main.faf4683e.css",
+    "static/js/main.924fa59c.js"
   ]
 }
