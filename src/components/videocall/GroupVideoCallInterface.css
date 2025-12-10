@@ -97,6 +97,24 @@
 .video-grid:has(.video-container:nth-child(3):last-child) {
   grid-template-columns: repeat(3, 1fr);
 }
+  
+  /* 2 participants on desktop: force equal side-by-side tiles (1fr 1fr) */
+  .group-video-call-container .video-grid:has(.video-container:nth-child(2):last-child) {
+    grid-template-columns: 1fr 1fr !important;
+    width: 92% !important;
+    margin: 24px auto 0 !important;
+    grid-auto-rows: minmax(320px, auto) !important; /* keep decent height */
+    grid-auto-flow: row dense !important;
+  }
+  
+  /* Cancel left-stage spanning when there are exactly 2 participants so both tiles are equal */
+  .group-video-call-container .video-grid:has(.video-container:nth-child(2):last-child) .video-container:nth-child(1),
+  .group-video-call-container .video-grid:has(.video-container:nth-child(2):last-child) .video-container:nth-child(2) {
+    grid-column: auto !important;
+    grid-row: auto !important;
+    min-height: 320px !important;
+    aspect-ratio: unset !important;
+  }
 
 /* 4 people: 2x2 grid */
 .video-grid:has(.video-container:nth-child(4):last-child) {

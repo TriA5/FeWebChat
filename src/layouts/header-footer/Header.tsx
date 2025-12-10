@@ -1,6 +1,7 @@
 import React from 'react';
 import './Header.css';
 import NotificationBell from '../util/NotificationBell';
+import { Link } from 'react-router-dom';
 
 const Header: React.FC = () => {
 	// const [isUserLoggedIn, setIsUserLoggedIn] = useState(false);
@@ -38,11 +39,11 @@ const Header: React.FC = () => {
 				<span className="header-title">ChatBook</span>
 			</div>
 			<nav className="header-nav">
-				<a href="/" className="header-link">Trang chủ</a>
+				<Link to="/" className="header-link">Trang chủ</Link>
 				 
 				<>
-					<a href="/login" className="header-link">Đăng nhập</a>
-					<a href="/register" className="header-link">Đăng ký</a>
+					<Link to="login" className="header-link">Đăng nhập</Link>
+					<Link to="register" className="header-link">Đăng ký</Link>
 				</>
 				
 			</nav>

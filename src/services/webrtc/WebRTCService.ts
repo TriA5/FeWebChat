@@ -3,6 +3,8 @@ import { VideoCallSignalDTO } from '../../api/videocall/videoCallApi';
 
 export class WebRTCService {
   private peerConnection: RTCPeerConnection | null = null;
+  // Simple last-answer SDP hash to deduplicate duplicate answers
+  private lastAnswerHash: string | null = null;
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private callId: string | null = null;
@@ -34,6 +36,18 @@ private iceServers = {
 
   constructor(userId: string) {
     this.userId = userId;
+  }
+
+  // Simple deterministic string hash (djb2) for SDP deduplication
+  private simpleHash(str: string): string {
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
+      // hash * 33 + c
+      hash = ((hash << 5) + hash) + str.charCodeAt(i);
+      // force 32-bit
+      hash = hash & 0xFFFFFFFF;
+    }
+    return (hash >>> 0).toString(16);
   }
 
   private handleRemoteTrack = (event: RTCTrackEvent) => {
@@ -327,13 +341,33 @@ private iceServers = {
           break;
 
         case 'CALL_ANSWER':
-          await this.peerConnection.setRemoteDescription(signal.data);
-          if (this.pendingIceCandidates.length > 0) {
-            console.log('🧊 Flushing buffered ICE candidates after answer:', this.pendingIceCandidates.length);
-            for (const c of this.pendingIceCandidates) {
-              try { await this.peerConnection.addIceCandidate(c); } catch (e) { console.warn('Failed to add buffered ICE', e); }
+          // Only apply an answer if we're in a state that expects one (we created an offer)
+          try {
+            const state = this.peerConnection.signalingState;
+            // Deduplicate identical answers (may be resent by server)
+            const sdp = (signal.data && (signal.data.sdp || '')) as string;
+            const hash = sdp ? this.simpleHash(sdp) : null;
+            if (hash && this.lastAnswerHash === hash) {
+              console.warn('⚠️ Ignoring duplicate CALL_ANSWER (same SDP hash)');
+              return;
             }
-            this.pendingIceCandidates = [];
+
+            if (state === 'have-local-offer' || state === 'have-local-pranswer') {
+              await this.peerConnection.setRemoteDescription(signal.data);
+              // remember applied answer
+              if (hash) this.lastAnswerHash = hash;
+              if (this.pendingIceCandidates.length > 0) {
+                console.log('🧊 Flushing buffered ICE candidates after answer:', this.pendingIceCandidates.length);
+                for (const c of this.pendingIceCandidates) {
+                  try { await this.peerConnection.addIceCandidate(c); } catch (e) { console.warn('Failed to add buffered ICE', e); }
+                }
+                this.pendingIceCandidates = [];
+              }
+            } else {
+              console.warn('⚠️ Ignoring CALL_ANSWER because signalingState is', state, 'localDesc:', !!this.peerConnection.localDescription, 'remoteDesc:', !!this.peerConnection.remoteDescription);
+            }
+          } catch (err) {
+            console.error('Error applying CALL_ANSWER (ignored):', err);
           }
           break;
 

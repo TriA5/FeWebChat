@@ -173,7 +173,9 @@ const VideoCallInterface: React.FC<VideoCallInterfaceProps> = ({
         </div>
 
         {/* Controls */}
-        <div className="call-controls">
+        <div className="call-controls"
+        style={{ padding: '4px' }}
+        >
           <button
             className={`control-btn ${isAudioEnabled ? 'active' : 'inactive'}`}
             onClick={onToggleAudio}
