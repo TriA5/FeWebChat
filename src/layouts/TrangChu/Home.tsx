@@ -116,6 +116,32 @@ const shortcuts = [
 	// { id: 4, label: 'Trang và Trang cá nhân', icon: '📄' },
 	{ id: 4, label: 'Nhóm', icon: '👪' },
 	{ id: 5, label: 'Marketplace', icon: '🛒' },
+	{ id: 6, label: 'Video trên Watch', icon: '📺' },
+	{ id: 7, label: 'Sự kiện', icon: '🎉' },
+	{ id: 8, label: 'Trang bạn quản lý', icon: '📄' },
+	{ id: 9, label: 'Reels', icon: '🎞️' },
+	{ id: 10, label: 'Trò chơi', icon: '🎮' },
+	{ id: 11, label: 'Vị trí', icon: '📍' },
+	{ id: 12, label: 'Thời tiết', icon: '⛅' },
+	{ id: 13, label: 'Việc làm', icon: '💼' },
+	{ id: 14, label: 'Hoạt động gần đây', icon: '🕘' },
+	{ id: 15, label: 'Tin nhắn', icon: '💬' },
+	{ id: 16, label: 'Trang cá nhân', icon: '🙍‍♂️' },
+	{ id: 17, label: 'Cài đặt & Quyền riêng tư', icon: '⚙️' },
+	{ id: 18, label: 'Trung tâm hỗ trợ', icon: '❓' },
+	{ id: 19, label: 'Chơi game trên cloud', icon: '☁️🎮' },
+	{ id: 20, label: 'Đơn hàng Marketplace', icon: '📦' },
+	{ id: 21, label: 'Khoảnh khắc', icon: '📸' },
+	{ id: 22, label: 'Nhạc', icon: '🎵' },
+	{ id: 23, label: 'Phim', icon: '🎬' },
+	{ id: 24, label: 'Sách', icon: '📘' },
+	{ id: 25, label: 'Hoạt động được đề xuất', icon: '⭐' },
+	{ id: 26, label: 'Phòng họp mặt', icon: '📞' },
+	{ id: 27, label: 'Mua sắm trực tiếp', icon: '🛍️' },
+	{ id: 28, label: 'Ứng dụng & Trò chơi', icon: '📱' },
+	{ id: 29, label: 'Ví & Thanh toán', icon: '💳' },
+	{ id: 30, label: 'Bảng xếp hạng game', icon: '🏆' }
+
 ];
 
 interface Contact {
@@ -1889,7 +1915,9 @@ const Home: React.FC = () => {
 							) : (
 								<>
 							<div className="fb-post__content-wrapper">
-								<p className={`fb-post__content ${expandedPosts[post.id] ? 'expanded' : ''}`}>
+								<p className={`fb-post__content ${expandedPosts[post.id] ? 'expanded' : ''}`}
+								             style={{margin:"0"}}
+								>
 									{post.content}
 								</p>
 								{post.content && post.content.length > 200 && (
